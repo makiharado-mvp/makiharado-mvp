@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FAFAF7;
+  --foreground: #3A3028;
+  --navy:       #1C3144;
+  --gold:       #C4A882;
+  --warm-mid:   #8A7A6A;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+input, textarea {
+  outline: none;
+}
