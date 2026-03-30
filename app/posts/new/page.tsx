@@ -1,11 +1,12 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createPost } from '@/app/actions'
 
-export default function NewPostPage() {
+function NewPostForm() {
   const [state, action, pending] = useActionState(createPost, undefined)
   const params = useSearchParams()
   const defaultDate = params.get('date') ?? new Date().toISOString().split('T')[0]
@@ -97,5 +98,13 @@ export default function NewPostPage() {
         </form>
       </div>
     </div>
+  )
+}
+
+export default function NewPostPage() {
+  return (
+    <Suspense>
+      <NewPostForm />
+    </Suspense>
   )
 }
