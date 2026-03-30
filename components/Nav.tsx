@@ -10,6 +10,12 @@ export default function Nav({ email }: { email: string }) {
         </Link>
         <div className="flex items-center gap-6">
           <Link
+            href="/calendar"
+            className="text-xs tracking-widest uppercase text-[#1C3144] hover:text-[#C4A882] transition-colors"
+          >
+            Calendar
+          </Link>
+          <Link
             href="/notes/new"
             className="text-xs tracking-widest uppercase text-[#FAFAF7] bg-[#1C3144] px-4 py-2 hover:bg-[#C4A882] transition-colors"
           >

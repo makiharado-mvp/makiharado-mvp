@@ -82,6 +82,48 @@ export async function createNote(_: unknown, formData: FormData) {
   redirect('/dashboard')
 }
 
+// ── Posts ─────────────────────────────────────────────────────
+
+export async function createPost(_: unknown, formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const title = (formData.get('title') as string).trim()
+  const content = (formData.get('content') as string).trim()
+  const post_date = formData.get('post_date') as string
+  const imageFile = formData.get('image') as File | null
+
+  if (!title) return { error: 'Title is required.' }
+  if (!post_date) return { error: 'Date is required.' }
+
+  let image_url: string | null = null
+
+  if (imageFile && imageFile.size > 0) {
+    const ext = imageFile.name.split('.').pop()
+    const path = `${user.id}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('note-images')
+      .upload(path, imageFile)
+
+    if (!uploadError) {
+      const { data: urlData } = supabase.storage
+        .from('note-images')
+        .getPublicUrl(path)
+      image_url = urlData.publicUrl
+    }
+  }
+
+  const { error } = await supabase
+    .from('posts')
+    .insert({ user_id: user.id, title, content, post_date, image_url })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/calendar')
+  redirect(`/calendar?date=${post_date}`)
+}
+
 // ── Reviews ───────────────────────────────────────────────────
 
 export async function completeReview(reviewId: string) {
