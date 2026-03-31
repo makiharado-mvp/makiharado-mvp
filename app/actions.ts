@@ -122,8 +122,8 @@ export async function createPost(_: unknown, formData: FormData) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/calendar')
-  redirect(`/calendar?date=${post_date}`)
+  revalidatePath('/dashboard')
+  redirect(`/dashboard?date=${post_date}`)
 }
 
 // ── Reviews ───────────────────────────────────────────────────
