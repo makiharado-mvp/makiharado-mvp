@@ -55,12 +55,12 @@ export async function createNote(_: unknown, formData: FormData) {
     const ext = imageFile.name.split('.').pop()
     const path = `${user.id}/${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
-      .from('note-images')
+      .from('note-image')
       .upload(path, imageFile)
 
     if (!uploadError) {
       const { data: urlData } = supabase.storage
-        .from('note-images')
+        .from('note-image')
         .getPublicUrl(path)
       image_url = urlData.publicUrl
     }
@@ -103,7 +103,7 @@ export async function createPost(_: unknown, formData: FormData) {
     const ext = imageFile.name.split('.').pop()
     const path = `${user.id}/${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage
-      .from('note-images')
+      .from('note-image')
       .upload(path, imageFile)
 
     if (uploadError) {
@@ -111,7 +111,7 @@ export async function createPost(_: unknown, formData: FormData) {
     }
 
     const { data: urlData } = supabase.storage
-      .from('note-images')
+      .from('note-image')
       .getPublicUrl(path)
     image_url = urlData.publicUrl
   }

@@ -48,7 +48,7 @@ create policy "reviews_update" on reviews for update using (auth.uid() = user_id
 create policy "reviews_delete" on reviews for delete using (auth.uid() = user_id);
 
 -- ============================================================
--- Storage: note-images bucket
+-- Storage: note-image bucket
 -- Run AFTER creating the bucket manually in Supabase Storage UI
 -- ============================================================
 
@@ -60,7 +60,7 @@ drop policy if exists "Images are publicly readable"  on storage.objects;
 create policy "Users upload their own images"
   on storage.objects for insert
   with check (
-    bucket_id = 'note-images'
+    bucket_id = 'note-image'
     and auth.role() = 'authenticated'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
@@ -68,12 +68,12 @@ create policy "Users upload their own images"
 -- Reads: images are publicly readable (URLs are embedded in notes, safe since notes are RLS-protected)
 create policy "Images are publicly readable"
   on storage.objects for select
-  using (bucket_id = 'note-images');
+  using (bucket_id = 'note-image');
 
 -- Deletes: users can only delete their own images
 create policy "Users delete their own images"
   on storage.objects for delete
   using (
-    bucket_id = 'note-images'
+    bucket_id = 'note-image'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
