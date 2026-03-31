@@ -3,10 +3,19 @@ import { createClient } from '@/lib/supabase/server'
 import Nav from '@/components/Nav'
 import CalendarView from '@/components/CalendarView'
 
-export default async function CalendarPage() {
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Resolve date server-side: honour ?date= param, else today in UTC
+  const { date } = await searchParams
+  const todayUTC = new Date().toISOString().split('T')[0]
+  const initialDate = date ?? todayUTC
 
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF7' }}>
@@ -24,7 +33,7 @@ export default async function CalendarPage() {
             + New Post
           </a>
         </div>
-        <CalendarView userId={user.id} />
+        <CalendarView userId={user.id} initialDate={initialDate} />
       </main>
     </div>
   )

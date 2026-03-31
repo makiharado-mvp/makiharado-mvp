@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import PostModal from '@/components/PostModal'
 import type { Post } from '@/types'
@@ -15,31 +15,59 @@ function toISO(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-export default function CalendarView({ userId }: { userId: string }) {
-  const today = new Date()
-  const todayISO = toISO(today.getFullYear(), today.getMonth(), today.getDate())
-
-  const [year, setYear]               = useState(today.getFullYear())
-  const [month, setMonth]             = useState(today.getMonth())
-  const [selectedDate, setSelectedDate] = useState(todayISO)
-  const [posts, setPosts]             = useState<Post[]>([])
-  const [loading, setLoading]         = useState(false)
+export default function CalendarView({
+  userId,
+  initialDate,
+}: {
+  userId: string
+  initialDate: string   // YYYY-MM-DD, resolved server-side — no SSR/client mismatch
+}) {
+  const [year, setYear]     = useState(() => parseInt(initialDate.slice(0, 4), 10))
+  const [month, setMonth]   = useState(() => parseInt(initialDate.slice(5, 7), 10) - 1)
+  const [selectedDate, setSelectedDate] = useState(initialDate)
+  const [todayISO, setTodayISO]         = useState('')   // set client-only to avoid mismatch
+  const [posts, setPosts]               = useState<Post[]>([])
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState<string | null>(null)
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
 
-  const fetchPosts = useCallback(async (date: string) => {
-    setLoading(true)
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('post_date', date)
-      .order('created_at', { ascending: false })
-    setPosts(data ?? [])
-    setLoading(false)
-  }, [userId])
+  // Set "today" only on the client to avoid SSR/hydration mismatch
+  useEffect(() => {
+    const t = new Date()
+    setTodayISO(toISO(t.getFullYear(), t.getMonth(), t.getDate()))
+  }, [])
 
-  useEffect(() => { fetchPosts(selectedDate) }, [selectedDate, fetchPosts])
+  // Fetch posts whenever selectedDate changes
+  useEffect(() => {
+    if (!selectedDate) return
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const supabase = createClient()
+        const { data, error: qErr } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('post_date', selectedDate)
+          .order('created_at', { ascending: false })
+        if (cancelled) return
+        if (qErr) throw qErr
+        setPosts(data ?? [])
+      } catch {
+        if (cancelled) return
+        setError('Could not load posts.')
+        setPosts([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [selectedDate, userId])
 
   function prevMonth() {
     if (month === 0) { setYear(y => y - 1); setMonth(11) }
@@ -93,22 +121,22 @@ export default function CalendarView({ userId }: { userId: string }) {
         <div className="grid grid-cols-7">
           {cells.map((day, i) => {
             if (!day) return <div key={`empty-${i}`} className="aspect-square" />
-            const iso = toISO(year, month, day)
-            const isToday    = iso === todayISO
+            const iso        = toISO(year, month, day)
             const isSelected = iso === selectedDate
+            const isToday    = iso === todayISO
             return (
               <button
                 key={iso}
+                type="button"
                 onClick={() => setSelectedDate(iso)}
-                className={`
-                  aspect-square flex items-center justify-center text-sm transition-colors
-                  ${isSelected
+                className={[
+                  'aspect-square flex items-center justify-center text-sm transition-colors',
+                  isSelected
                     ? 'bg-[#1C3144] text-[#FAFAF7]'
                     : isToday
                       ? 'bg-[#C4A882]/20 text-[#1C3144] font-medium'
-                      : 'text-[#3A3028] hover:bg-[#C4A882]/10'
-                  }
-                `}
+                      : 'text-[#3A3028] hover:bg-[#C4A882]/10',
+                ].join(' ')}
               >
                 {day}
               </button>
@@ -133,6 +161,10 @@ export default function CalendarView({ userId }: { userId: string }) {
           </a>
         </div>
 
+        {error && (
+          <p className="text-xs text-red-600 py-2">{error}</p>
+        )}
+
         {loading ? (
           <p className="text-xs text-[#8A7A6A] tracking-wide py-6 text-center">Loading...</p>
         ) : posts.length === 0 ? (
@@ -144,6 +176,7 @@ export default function CalendarView({ userId }: { userId: string }) {
             {posts.map(post => (
               <button
                 key={post.id}
+                type="button"
                 onClick={() => setSelectedPost(post)}
                 className="w-full text-left border border-[#C4A882]/30 bg-white p-4 hover:border-[#C4A882] transition-colors flex items-start gap-4"
               >
