@@ -106,12 +106,14 @@ export async function createPost(_: unknown, formData: FormData) {
       .from('note-images')
       .upload(path, imageFile)
 
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage
-        .from('note-images')
-        .getPublicUrl(path)
-      image_url = urlData.publicUrl
+    if (uploadError) {
+      return { error: `Image upload failed: ${uploadError.message}` }
     }
+
+    const { data: urlData } = supabase.storage
+      .from('note-images')
+      .getPublicUrl(path)
+    image_url = urlData.publicUrl
   }
 
   const { error } = await supabase
