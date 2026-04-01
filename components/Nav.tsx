@@ -12,14 +12,22 @@ export default function Nav({ email }: { email: string }) {
         >
           Makiharado
         </Link>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="text-xs tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors"
+        <div className="flex items-center gap-5">
+          <Link
+            href="/"
+            className="text-xs tracking-widest uppercase text-[#C4A882]/60 hover:text-[#8A7A6A] transition-colors"
           >
-            Sign out
-          </button>
-        </form>
+            Home
+          </Link>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="text-xs tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </nav>
   )
