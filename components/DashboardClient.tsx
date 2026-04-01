@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition, useActionState } from 'react'
 import { createPost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
-import type { Note, Post, Review } from '@/types'
+import type { Post, Review } from '@/types'
 
 function NotificationToggle({ enabled }: { enabled: boolean }) {
   const [on, setOn] = useState(enabled)
@@ -99,8 +99,10 @@ function PostDetailModal({ post, onClose }: { post: Post; onClose: () => void })
   )
 }
 
-function NoteDetailModal({ note, reviewDay, dueDate, onClose }: {
-  note: Note
+function NoteDetailModal({ title, imageUrl, content, reviewDay, dueDate, onClose }: {
+  title: string
+  imageUrl: string | null
+  content: string
   reviewDay: number
   dueDate: string
   onClose: () => void
@@ -120,7 +122,7 @@ function NoteDetailModal({ note, reviewDay, dueDate, onClose }: {
             <p className="text-[10px] tracking-widest uppercase text-[#C4A882] mb-1">
               Review Day {reviewDay} — due {formatDate(dueDate, { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
-            <h2 className="text-[#1C3144] text-lg">{note.title}</h2>
+            <h2 className="text-[#1C3144] text-lg">{title}</h2>
           </div>
           <button
             type="button"
@@ -130,13 +132,13 @@ function NoteDetailModal({ note, reviewDay, dueDate, onClose }: {
             ✕
           </button>
         </div>
-        {note.image_url && (
+        {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={note.image_url} alt={note.title} className="w-full object-contain" />
+          <img src={imageUrl} alt={title} className="w-full object-contain" />
         )}
-        {note.content && (
+        {content && (
           <div className="p-5 border-t border-[#C4A882]/20">
-            <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">{note.content}</p>
+            <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">{content}</p>
           </div>
         )}
       </div>
@@ -177,7 +179,7 @@ export default function DashboardClient({
     const supabase = createClient()
     supabase
       .from('reviews')
-      .select('*, notes(*)')
+      .select('*, notes(*), posts(*)')
       .eq('user_id', userId)
       .eq('due_date', selectedDate)
       .then(({ data }) => setDateReviews(data ?? []))
@@ -293,19 +295,22 @@ export default function DashboardClient({
                 <p className="text-[10px] text-[#C4A882]/60 tracking-wide">No reviews scheduled for this date.</p>
               ) : (
                 <div className="space-y-1">
-                  {dateReviews.map(review => (
-                    <button
-                      key={review.id}
-                      type="button"
-                      onClick={() => setSelectedReview(review)}
-                      className="w-full text-left px-3 py-2.5 border border-[#C4A882]/30 bg-white hover:border-[#C4A882] transition-colors"
-                    >
-                      <p className="text-[#1C3144] text-sm truncate">{review.notes?.title ?? '—'}</p>
-                      <p className="text-[10px] text-[#8A7A6A] mt-0.5">
-                        Day {review.interval_day}{review.completed_at ? ' · reviewed' : ''}
-                      </p>
-                    </button>
-                  ))}
+                  {dateReviews.map(review => {
+                    const source = review.notes ?? review.posts
+                    return (
+                      <button
+                        key={review.id}
+                        type="button"
+                        onClick={() => setSelectedReview(review)}
+                        className="w-full text-left px-3 py-2.5 border border-[#C4A882]/30 bg-white hover:border-[#C4A882] transition-colors"
+                      >
+                        <p className="text-[#1C3144] text-sm truncate">{source?.title ?? '—'}</p>
+                        <p className="text-[10px] text-[#8A7A6A] mt-0.5">
+                          Day {review.interval_day}{review.completed_at ? ' · reviewed' : ''}
+                        </p>
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -411,15 +416,20 @@ export default function DashboardClient({
         <PostDetailModal post={selectedPost} onClose={() => setSelectedPost(null)} />
       )}
 
-      {/* Review note detail modal */}
-      {selectedReview?.notes && (
-        <NoteDetailModal
-          note={selectedReview.notes}
-          reviewDay={selectedReview.interval_day}
-          dueDate={selectedReview.due_date}
-          onClose={() => setSelectedReview(null)}
-        />
-      )}
+      {/* Review note/post detail modal */}
+      {selectedReview && (selectedReview.notes ?? selectedReview.posts) && (() => {
+        const source = selectedReview.notes ?? selectedReview.posts!
+        return (
+          <NoteDetailModal
+            title={source.title}
+            imageUrl={source.image_url}
+            content={source.content}
+            reviewDay={selectedReview.interval_day}
+            dueDate={selectedReview.due_date}
+            onClose={() => setSelectedReview(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

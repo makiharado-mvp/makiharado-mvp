@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { scheduleReviews } from '@/lib/reviews'
+import { scheduleReviews, schedulePostReviews } from '@/lib/reviews'
 
 // ── Auth ──────────────────────────────────────────────────────
 
@@ -120,11 +120,19 @@ export async function createPost(_: unknown, formData: FormData) {
     image_url = urlData.publicUrl
   }
 
-  const { error } = await supabase
+  const { data: post, error } = await supabase
     .from('posts')
     .insert({ user_id: user.id, title, content, post_date, image_url })
+    .select()
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !post) return { error: error?.message ?? 'Failed to create post' }
+
+  // Schedule review records for this post (ignore duplicates)
+  const reviewRows = schedulePostReviews(post_date, post.id, user.id)
+  await supabase
+    .from('reviews')
+    .upsert(reviewRows, { onConflict: 'post_id,interval_day', ignoreDuplicates: true })
 
   revalidatePath('/dashboard')
   redirect(`/dashboard?date=${post_date}`)

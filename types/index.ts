@@ -19,11 +19,13 @@ export type Post = {
 
 export type Review = {
   id: string
-  note_id: string
+  note_id: string | null
+  post_id: string | null
   user_id: string
   interval_day: number
   due_date: string        // YYYY-MM-DD
   completed_at: string | null
   created_at: string
   notes?: Note
+  posts?: Post
 }

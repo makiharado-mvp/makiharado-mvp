@@ -35,6 +35,31 @@ export function todayISO(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+/**
+ * Schedule review dates for a post.
+ * Uses post_date (YYYY-MM-DD) as the base day.
+ * Reviews are linked via post_id (not note_id).
+ */
+export function schedulePostReviews(
+  postDate: string, // YYYY-MM-DD
+  postId: string,
+  userId: string
+) {
+  const base = new Date(postDate + 'T00:00:00')
+  base.setHours(0, 0, 0, 0)
+
+  return INTERVALS.map(day => {
+    const due = new Date(base)
+    due.setDate(due.getDate() + day)
+    return {
+      post_id: postId,
+      user_id: userId,
+      interval_day: day,
+      due_date: due.toISOString().split('T')[0], // YYYY-MM-DD
+    }
+  })
+}
+
 /** Human-readable interval label */
 export function intervalLabel(day: number): string {
   const map: Record<number, string> = {
