@@ -4,7 +4,19 @@ import { useState, useEffect, useTransition, useActionState } from 'react'
 import { createPost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
+import { INTERVALS } from '@/lib/reviews'
 import type { Post, Review } from '@/types'
+
+/** Returns the due date (YYYY-MM-DD) of the next scheduled review, or null if this is the last. */
+function nextReviewDate(dueDate: string, intervalDay: number): string | null {
+  const idx = INTERVALS.indexOf(intervalDay)
+  if (idx === -1 || idx === INTERVALS.length - 1) return null
+  const nextInterval = INTERVALS[idx + 1]
+  // Derive base date: base = dueDate − intervalDay days, then add nextInterval
+  const base = new Date(dueDate + 'T00:00:00')
+  base.setDate(base.getDate() - intervalDay + nextInterval)
+  return base.toISOString().split('T')[0]
+}
 
 function NotificationToggle({ enabled }: { enabled: boolean }) {
   const [on, setOn] = useState(enabled)
@@ -297,6 +309,7 @@ export default function DashboardClient({
                 <div className="space-y-1">
                   {dateReviews.map(review => {
                     const source = review.notes ?? review.posts
+                    const next = nextReviewDate(review.due_date, review.interval_day)
                     return (
                       <button
                         key={review.id}
@@ -306,7 +319,11 @@ export default function DashboardClient({
                       >
                         <p className="text-[#1C3144] text-sm truncate">{source?.title ?? '—'}</p>
                         <p className="text-[10px] text-[#8A7A6A] mt-0.5">
-                          Day {review.interval_day}{review.completed_at ? ' · reviewed' : ''}
+                          Day {review.interval_day}
+                          {next
+                            ? ` · Next: ${formatDate(next, { day: 'numeric', month: 'short' })}`
+                            : ' · Final review'}
+                          {review.completed_at ? ' · done' : ''}
                         </p>
                       </button>
                     )
