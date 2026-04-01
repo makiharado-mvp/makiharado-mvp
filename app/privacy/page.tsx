@@ -79,8 +79,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">Contact</h2>
             <p>
-              If you have any questions about this policy or your data, please contact us at{' '}
-              <span className="text-[#1C3144]">hello@makiharado.com</span>.
+              A contact method for privacy-related enquiries is currently being prepared
+              and will be made available on this page in due course.
             </p>
           </section>
 
