@@ -7,13 +7,13 @@ import DashboardClient from '@/components/DashboardClient'
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>
+  searchParams: Promise<{ date?: string; note?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { date } = await searchParams
+  const { date, note: initialNoteId } = await searchParams
   const initialDate = date ?? todayISO()
 
   // Reviews due today or earlier, not yet completed
@@ -49,6 +49,8 @@ export default async function DashboardPage({
         posts={posts ?? []}
         initialDate={initialDate}
         notificationEnabled={settings?.notification_enabled ?? false}
+        initialNoteId={initialNoteId}
+        userId={user.id}
       />
     </div>
   )

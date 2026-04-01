@@ -5,8 +5,8 @@ import { completeReview } from '@/app/actions'
 import { intervalLabel } from '@/lib/reviews'
 import type { Review } from '@/types'
 
-export default function ReviewCard({ review }: { review: Review }) {
-  const [open, setOpen] = useState(false)
+export default function ReviewCard({ review, initialOpen }: { review: Review; initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen ?? false)
   const [pending, startTransition] = useTransition()
 
   function handleComplete() {
