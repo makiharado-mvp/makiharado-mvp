@@ -94,11 +94,10 @@ export async function createPost(_: unknown, formData: FormData) {
 
   const title = (formData.get('title') as string).trim()
   const content = (formData.get('content') as string).trim()
-  const post_date = formData.get('post_date') as string
+  const post_date = new Date().toISOString().split('T')[0] // always today on the server
   const imageFile = formData.get('image') as File | null
 
   if (!title) return { error: 'Title is required.' }
-  if (!post_date) return { error: 'Date is required.' }
   if (!imageFile || imageFile.size === 0) return { error: 'Image is required.' }
 
   let image_url: string | null = null

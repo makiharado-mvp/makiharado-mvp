@@ -349,7 +349,6 @@ export default function DashboardClient({
           <div>
             <p className="text-[10px] tracking-[6px] uppercase text-[#C4A882] mb-3">New Post</p>
             <form action={formAction} className="space-y-3">
-              <input type="hidden" name="post_date" value={selectedDate} />
 
               <div>
                 <label className="block text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-1">
