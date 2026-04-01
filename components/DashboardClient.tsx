@@ -96,6 +96,10 @@ export default function DashboardClient({
     Array.from({ length: daysInMonth }, (_, i) => i + 1)
   )
 
+  // Posts for the selected calendar date
+  const datePosts = posts.filter(p => p.post_date === selectedDate)
+
+  // All posts split for bottom section
   const latestPost = posts[0] ?? null
   const olderPosts = posts.slice(1)
 
@@ -105,7 +109,7 @@ export default function DashboardClient({
       {/* ── Top: Calendar (left) + Reviews + Post Form (right) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-14">
 
-        {/* Left — Calendar */}
+        {/* Left — Calendar + date post list */}
         <div>
           <p className="text-[10px] tracking-[6px] uppercase text-[#C4A882] mb-4">Calendar</p>
           <div className="border border-[#C4A882]/30 bg-white">
@@ -157,9 +161,29 @@ export default function DashboardClient({
               })}
             </div>
           </div>
-          <p className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mt-3 text-center">
-            {formatDate(selectedDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+
+          {/* Posts for selected date */}
+          <div className="mt-4">
+            <p className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-2">
+              {formatDate(selectedDate, { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            {datePosts.length === 0 ? (
+              <p className="text-[10px] text-[#C4A882]/70 tracking-wide">No posts on this date.</p>
+            ) : (
+              <div className="space-y-1">
+                {datePosts.map(post => (
+                  <button
+                    key={post.id}
+                    type="button"
+                    onClick={() => setSelectedPost(post)}
+                    className="w-full text-left px-3 py-2 border border-[#C4A882]/30 bg-white hover:border-[#C4A882] transition-colors"
+                  >
+                    <p className="text-[#1C3144] text-sm truncate">{post.title}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right — Reviews + Post Form */}
@@ -257,56 +281,60 @@ export default function DashboardClient({
             <p className="text-[#8A7A6A] text-sm">No posts yet. Select a date and save your first post.</p>
           </div>
         ) : (
-          <>
-            {/* Featured — latest post full width */}
-            {latestPost && (
-              <div className="border border-[#C4A882]/30 bg-white mb-8">
-                <div className="p-5 border-b border-[#C4A882]/20">
-                  <p className="text-[10px] tracking-widest uppercase text-[#C4A882] mb-1">
-                    {formatDate(latestPost.post_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                  <h2 className="text-[#1C3144] text-xl">{latestPost.title}</h2>
-                </div>
-                {latestPost.image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={latestPost.image_url}
-                    alt={latestPost.title}
-                    className="w-full object-contain"
-                  />
-                )}
-                {latestPost.content && (
-                  <div className="p-5 border-t border-[#C4A882]/20">
-                    <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">
-                      {latestPost.content}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            {/* Older posts — horizontal scrollable list, date + title only */}
+            {/* Featured — latest post */}
+            <div className="lg:col-span-2">
+              {latestPost && (
+                <div className="border border-[#C4A882]/30 bg-white">
+                  <div className="p-5 border-b border-[#C4A882]/20">
+                    <p className="text-[10px] tracking-widest uppercase text-[#C4A882] mb-1">
+                      {formatDate(latestPost.post_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <h2 className="text-[#1C3144] text-xl">{latestPost.title}</h2>
+                  </div>
+                  {latestPost.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={latestPost.image_url}
+                      alt={latestPost.title}
+                      className="w-full object-contain"
+                    />
+                  )}
+                  {latestPost.content && (
+                    <div className="p-5 border-t border-[#C4A882]/20">
+                      <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">
+                        {latestPost.content}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Earlier posts — vertical scrollable list */}
             {olderPosts.length > 0 && (
-              <div>
+              <div className="lg:col-span-1">
                 <p className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">Earlier</p>
-                <div className="flex gap-3 overflow-x-auto pb-2">
+                <div className="h-80 overflow-y-auto space-y-1 pr-1">
                   {olderPosts.map(post => (
                     <button
                       key={post.id}
                       type="button"
                       onClick={() => setSelectedPost(post)}
-                      className="flex-none border border-[#C4A882]/30 bg-white px-4 py-3 text-left hover:border-[#C4A882] transition-colors w-44"
+                      className="w-full text-left border border-[#C4A882]/30 bg-white px-4 py-3 hover:border-[#C4A882] transition-colors"
                     >
-                      <p className="text-[10px] tracking-widest uppercase text-[#C4A882] mb-1">
+                      <p className="text-[10px] tracking-widest uppercase text-[#C4A882] mb-0.5">
                         {formatDate(post.post_date, { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
-                      <p className="text-[#1C3144] text-sm font-medium truncate">{post.title}</p>
+                      <p className="text-[#1C3144] text-sm truncate">{post.title}</p>
                     </button>
                   ))}
                 </div>
               </div>
             )}
-          </>
+
+          </div>
         )}
       </div>
 
