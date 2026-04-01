@@ -32,7 +32,9 @@ export async function proxy(request: NextRequest) {
   const isAuthRoute = publicRoutes.some(r => pathname.startsWith(r))
 
   if (!user && !isAuthRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
+    return NextResponse.redirect(loginUrl)
   }
 
   if (user && isAuthRoute) {

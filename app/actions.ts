@@ -14,7 +14,10 @@ export async function signIn(_: unknown, formData: FormData) {
     password: formData.get('password') as string,
   })
   if (error) return { error: error.message }
-  redirect('/dashboard')
+  // Honour same-origin next param (e.g. from email reminder link)
+  const next = formData.get('next') as string | null
+  const destination = next?.startsWith('/') ? next : '/dashboard'
+  redirect(destination)
 }
 
 export async function signUp(_: unknown, formData: FormData) {
