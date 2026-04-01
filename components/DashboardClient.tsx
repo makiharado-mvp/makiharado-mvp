@@ -4,19 +4,7 @@ import { useState, useEffect, useTransition, useActionState } from 'react'
 import { createPost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
-import { INTERVALS } from '@/lib/reviews'
 import type { Post, Review } from '@/types'
-
-/** Returns the due date (YYYY-MM-DD) of the next scheduled review, or null if this is the last. */
-function nextReviewDate(dueDate: string, intervalDay: number): string | null {
-  const idx = INTERVALS.indexOf(intervalDay)
-  if (idx === -1 || idx === INTERVALS.length - 1) return null
-  const nextInterval = INTERVALS[idx + 1]
-  // Derive base date: base = dueDate − intervalDay days, then add nextInterval
-  const base = new Date(dueDate + 'T00:00:00')
-  base.setDate(base.getDate() - intervalDay + nextInterval)
-  return base.toISOString().split('T')[0]
-}
 
 function NotificationToggle({ enabled }: { enabled: boolean }) {
   const [on, setOn] = useState(enabled)
@@ -180,6 +168,8 @@ export default function DashboardClient({
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [dateReviews, setDateReviews] = useState<Review[]>([])
+  // maps review.id → next due_date string, or null if this is the final review
+  const [nextDueDateMap, setNextDueDateMap] = useState<Record<string, string | null>>({})
   const [formState, formAction, formPending] = useActionState(createPost, undefined)
 
   useEffect(() => {
@@ -189,12 +179,50 @@ export default function DashboardClient({
 
   useEffect(() => {
     const supabase = createClient()
-    supabase
-      .from('reviews')
-      .select('*, notes(*), posts(*)')
-      .eq('user_id', userId)
-      .eq('due_date', selectedDate)
-      .then(({ data }) => setDateReviews(data ?? []))
+
+    async function load() {
+      const { data: current } = await supabase
+        .from('reviews')
+        .select('*, notes(*), posts(*)')
+        .eq('user_id', userId)
+        .eq('due_date', selectedDate)
+
+      const reviews = current ?? []
+      setDateReviews(reviews)
+
+      // Collect post_ids and note_ids to look up next scheduled review for each
+      const postIds = reviews.map(r => r.post_id).filter(Boolean) as string[]
+      const noteIds = reviews.map(r => r.note_id).filter(Boolean) as string[]
+
+      if (postIds.length === 0 && noteIds.length === 0) {
+        setNextDueDateMap({})
+        return
+      }
+
+      const filters: string[] = []
+      if (postIds.length > 0) filters.push(`post_id.in.(${postIds.join(',')})`)
+      if (noteIds.length > 0) filters.push(`note_id.in.(${noteIds.join(',')})`)
+
+      const { data: upcoming } = await supabase
+        .from('reviews')
+        .select('post_id, note_id, due_date')
+        .eq('user_id', userId)
+        .or(filters.join(','))
+        .gt('due_date', selectedDate)
+        .order('due_date', { ascending: true })
+
+      const map: Record<string, string | null> = {}
+      for (const r of reviews) {
+        const next = (upcoming ?? []).find(u =>
+          (r.post_id && u.post_id === r.post_id) ||
+          (r.note_id && u.note_id === r.note_id)
+        )
+        map[r.id] = next?.due_date ?? null
+      }
+      setNextDueDateMap(map)
+    }
+
+    load()
   }, [selectedDate, userId])
 
   function prevMonth() {
@@ -309,7 +337,7 @@ export default function DashboardClient({
                 <div className="space-y-1">
                   {dateReviews.map(review => {
                     const source = review.notes ?? review.posts
-                    const next = nextReviewDate(review.due_date, review.interval_day)
+                    const nextDue = nextDueDateMap[review.id]
                     return (
                       <button
                         key={review.id}
@@ -320,9 +348,11 @@ export default function DashboardClient({
                         <p className="text-[#1C3144] text-sm truncate">{source?.title ?? '—'}</p>
                         <p className="text-[10px] text-[#8A7A6A] mt-0.5">
                           Day {review.interval_day}
-                          {next
-                            ? ` · Next: ${formatDate(next, { day: 'numeric', month: 'short' })}`
-                            : ' · Final review'}
+                          {review.id in nextDueDateMap
+                            ? nextDue
+                              ? ` · Next: ${formatDate(nextDue, { day: 'numeric', month: 'short' })}`
+                              : ' · Final review'
+                            : ''}
                           {review.completed_at ? ' · done' : ''}
                         </p>
                       </button>
