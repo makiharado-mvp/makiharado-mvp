@@ -30,7 +30,7 @@ export async function proxy(request: NextRequest) {
 
   // Explicitly named public routes only — /api/ is NOT a blanket exemption
   const publicRoutes = ['/login', '/signup', '/privacy', '/api/send-reminders']
-  const isPublicRoute = publicRoutes.some(r => pathname.startsWith(r))
+  const isPublicRoute = pathname === '/' || publicRoutes.some(r => pathname.startsWith(r))
 
   if (!user && !isPublicRoute) {
     const loginUrl = new URL('/login', request.url)
