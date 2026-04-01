@@ -254,6 +254,10 @@ export default function DashboardClient({
                 <p className="text-xs text-red-600">{formState.error}</p>
               )}
 
+              <p className="text-[10px] text-[#C4A882]/70 leading-relaxed">
+                Uploaded content may be stored and visible as part of the service.
+              </p>
+
               <button
                 type="submit"
                 disabled={formPending}
