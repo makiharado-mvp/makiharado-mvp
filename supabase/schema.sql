@@ -36,12 +36,22 @@ drop policy if exists "Users manage their own notes"   on notes;
 drop policy if exists "Users manage their own reviews" on reviews;
 
 -- Notes: explicit per-operation policies
+drop policy if exists "notes_select" on notes;
+drop policy if exists "notes_insert" on notes;
+drop policy if exists "notes_update" on notes;
+drop policy if exists "notes_delete" on notes;
+
 create policy "notes_select" on notes for select using (auth.uid() = user_id);
 create policy "notes_insert" on notes for insert with check (auth.uid() = user_id);
 create policy "notes_update" on notes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "notes_delete" on notes for delete using (auth.uid() = user_id);
 
 -- Reviews: explicit per-operation policies
+drop policy if exists "reviews_select" on reviews;
+drop policy if exists "reviews_insert" on reviews;
+drop policy if exists "reviews_update" on reviews;
+drop policy if exists "reviews_delete" on reviews;
+
 create policy "reviews_select" on reviews for select using (auth.uid() = user_id);
 create policy "reviews_insert" on reviews for insert with check (auth.uid() = user_id);
 create policy "reviews_update" on reviews for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -55,6 +65,7 @@ create policy "reviews_delete" on reviews for delete using (auth.uid() = user_id
 -- Drop existing storage policies if rerunning
 drop policy if exists "Users upload their own images" on storage.objects;
 drop policy if exists "Images are publicly readable"  on storage.objects;
+drop policy if exists "Users delete their own images" on storage.objects;
 
 -- Uploads: authenticated users can only upload to their own folder (user_id/filename)
 create policy "Users upload their own images"

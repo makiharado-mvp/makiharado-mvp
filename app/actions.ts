@@ -146,9 +146,12 @@ export async function toggleNotifications(enabled: boolean) {
 
 export async function completeReview(reviewId: string) {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
   await supabase
     .from('reviews')
     .update({ completed_at: new Date().toISOString() })
     .eq('id', reviewId)
+    .eq('user_id', user.id)
   revalidatePath('/dashboard')
 }

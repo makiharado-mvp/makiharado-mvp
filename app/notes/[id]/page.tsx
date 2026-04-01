@@ -26,6 +26,7 @@ export default async function NoteDetailPage({
     .from('reviews')
     .select('*')
     .eq('note_id', id)
+    .eq('user_id', user.id)
     .order('due_date', { ascending: true })
 
   const createdDate = new Date(note.created_at).toLocaleDateString('en-GB', {
