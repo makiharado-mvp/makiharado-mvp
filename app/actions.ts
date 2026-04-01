@@ -96,6 +96,7 @@ export async function createPost(_: unknown, formData: FormData) {
 
   if (!title) return { error: 'Title is required.' }
   if (!post_date) return { error: 'Date is required.' }
+  if (!imageFile || imageFile.size === 0) return { error: 'Image is required.' }
 
   let image_url: string | null = null
 
