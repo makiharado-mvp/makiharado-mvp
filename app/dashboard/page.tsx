@@ -34,6 +34,13 @@ export default async function DashboardPage({
     .order('created_at', { ascending: false })
     .limit(30)
 
+  // Notification preference (row may not exist yet — default false)
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('notification_enabled')
+    .eq('user_id', user.id)
+    .single()
+
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF7' }}>
       <Nav email={user.email ?? ''} />
@@ -41,6 +48,7 @@ export default async function DashboardPage({
         reviews={reviews ?? []}
         posts={posts ?? []}
         initialDate={initialDate}
+        notificationEnabled={settings?.notification_enabled ?? false}
       />
     </div>
   )

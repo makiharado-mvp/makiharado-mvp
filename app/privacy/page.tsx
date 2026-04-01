@@ -28,8 +28,17 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">What we collect</h2>
             <p>
-              We collect your email address when you create an account. This is used solely
-              for authentication — to let you sign in and access your content.
+              We collect your email address when you create an account. It is used for
+              authentication and, if you opt in, for review reminder notifications.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">Email notifications</h2>
+            <p>
+              You can choose to receive email reminders on days when you have notes to review.
+              This is opt-in and can be turned off at any time from your dashboard.
+              Notifications are triggered by your activity — specifically your review schedule.
             </p>
           </section>
 
@@ -50,8 +59,8 @@ export default function PrivacyPage() {
             <h2 className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">How we use your data</h2>
             <p>
               Your data is used only to provide the Makiharado service — storing your notes,
-              scheduling your reviews, and displaying your posts. We do not use it for
-              advertising or analytics.
+              scheduling your reviews, displaying your posts, and sending reminders if enabled.
+              We do not use it for advertising or analytics.
             </p>
           </section>
 
@@ -61,9 +70,9 @@ export default function PrivacyPage() {
               Makiharado is built on{' '}
               <span className="text-[#1C3144]">Supabase</span> (database and file storage)
               and{' '}
-              <span className="text-[#1C3144]">Vercel</span> (hosting). Your data is
-              processed and stored on their infrastructure. We do not intentionally share
-              your personal data with any other third parties.
+              <span className="text-[#1C3144]">Vercel</span> (hosting). Reminder emails are
+              sent via Gmail. Your data is processed and stored on their infrastructure.
+              We do not intentionally share your personal data with any other third parties.
             </p>
           </section>
 

@@ -127,6 +127,18 @@ export async function createPost(_: unknown, formData: FormData) {
   redirect(`/dashboard?date=${post_date}`)
 }
 
+// ── Notifications ─────────────────────────────────────────────
+
+export async function toggleNotifications(enabled: boolean) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  await supabase
+    .from('user_settings')
+    .upsert({ user_id: user.id, notification_enabled: enabled })
+  revalidatePath('/dashboard')
+}
+
 // ── Reviews ───────────────────────────────────────────────────
 
 export async function completeReview(reviewId: string) {

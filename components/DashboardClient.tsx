@@ -1,9 +1,48 @@
 'use client'
 
-import { useState, useEffect, useActionState } from 'react'
-import { createPost } from '@/app/actions'
+import { useState, useEffect, useTransition, useActionState } from 'react'
+import { createPost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import type { Post, Review } from '@/types'
+
+function NotificationToggle({ enabled }: { enabled: boolean }) {
+  const [on, setOn] = useState(enabled)
+  const [pending, startTransition] = useTransition()
+
+  function handleToggle() {
+    const next = !on
+    setOn(next)
+    startTransition(async () => {
+      await toggleNotifications(next)
+    })
+  }
+
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-[#C4A882]/20">
+      <div>
+        <p className="text-[10px] tracking-widest uppercase text-[#8A7A6A]">Email Reminders</p>
+        <p className="text-[10px] text-[#C4A882]/70 mt-0.5">Notify me on review days</p>
+      </div>
+      <button
+        type="button"
+        onClick={handleToggle}
+        disabled={pending}
+        className={[
+          'relative w-10 h-5 rounded-full transition-colors duration-200 disabled:opacity-40',
+          on ? 'bg-[#1C3144]' : 'bg-[#C4A882]/30',
+        ].join(' ')}
+        aria-label={on ? 'Turn off email reminders' : 'Turn on email reminders'}
+      >
+        <span
+          className={[
+            'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200',
+            on ? 'translate-x-5' : 'translate-x-0.5',
+          ].join(' ')}
+        />
+      </button>
+    </div>
+  )
+}
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -63,10 +102,12 @@ export default function DashboardClient({
   reviews,
   posts,
   initialDate,
+  notificationEnabled,
 }: {
   reviews: Review[]
   posts: Post[]
   initialDate: string
+  notificationEnabled: boolean
 }) {
   const [year, setYear]   = useState(() => parseInt(initialDate.slice(0, 4), 10))
   const [month, setMonth] = useState(() => parseInt(initialDate.slice(5, 7), 10) - 1)
@@ -204,6 +245,9 @@ export default function DashboardClient({
               </div>
             )}
           </div>
+
+          {/* Notification toggle */}
+          <NotificationToggle enabled={notificationEnabled} />
 
           {/* New Post Form */}
           <div>
