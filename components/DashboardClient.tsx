@@ -384,7 +384,6 @@ export default function DashboardClient({
             ) : (
               <div className="border border-[#C4A882]/30 p-4 text-center">
                 <p className="text-[#8A7A6A] text-sm">Nothing due today.</p>
-                <p className="text-[#C4A882] text-xs mt-1">良い調子です</p>
               </div>
             )}
           </div>
