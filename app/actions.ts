@@ -277,7 +277,13 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
     return { error: `Failed to delete account credentials: ${authError.message}` }
   }
 
-  // Session cookie will be invalidated by the proxy on next request
+  // Explicitly sign out to clear the session cookie from the browser.
+  // auth.admin.deleteUser() revokes the refresh token but does not invalidate
+  // the existing JWT access token (valid up to 1 hour). Without this call,
+  // the proxy would see a still-valid JWT and auto-redirect back to /dashboard.
+  // signOut() clears the cookie even if the server-side revocation call fails.
+  await supabase.auth.signOut()
+
   redirect('/login?message=account-deleted')
 }
 
