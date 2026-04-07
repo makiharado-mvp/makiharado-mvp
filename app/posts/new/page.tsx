@@ -70,16 +70,18 @@ function NewPostForm() {
             />
           </div>
 
-          {/* Image */}
+          {/* Images */}
           <div>
             <label className="block text-xs tracking-widest uppercase text-[#8A7A6A] mb-1.5">
-              Image
-              <span className="normal-case tracking-normal text-[#C4A882] ml-1">(optional)</span>
+              Images <span className="text-red-500">*</span>
+              <span className="normal-case tracking-normal text-[#C4A882] ml-1">(1–5)</span>
             </label>
             <input
               name="image"
               type="file"
               accept="image/*"
+              multiple
+              required
               className="w-full border border-[#C4A882]/40 bg-white px-3 py-2 text-[#3A3028] text-sm file:mr-3 file:border-0 file:bg-[#1C3144] file:text-[#FAFAF7] file:text-xs file:tracking-widest file:uppercase file:px-3 file:py-1 file:cursor-pointer"
             />
           </div>

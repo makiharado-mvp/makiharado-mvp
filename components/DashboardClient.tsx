@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition, useActionState } from 'react'
 import { createPost, deletePost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
-import type { Post, Review } from '@/types'
+import type { Post, PostImage, Review } from '@/types'
 
 function NotificationToggle({ enabled }: { enabled: boolean }) {
   const [on, setOn] = useState(enabled)
@@ -102,10 +102,19 @@ function PostDetailModal({ post, onClose }: { post: Post; onClose: () => void })
             ✕
           </button>
         </div>
-        {post.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.image_url} alt={post.title} className="w-full object-contain" />
-        )}
+        {/* Images: use post_images (sorted by position), fall back to legacy image_url */}
+        {(post.post_images && post.post_images.length > 0)
+          ? [...post.post_images]
+              .sort((a: PostImage, b: PostImage) => a.position - b.position)
+              .map((img: PostImage) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={img.id} src={img.image_url} alt={post.title} className="w-full object-contain" />
+              ))
+          : post.image_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={post.image_url} alt={post.title} className="w-full object-contain" />
+            )
+        }
         {post.content && (
           <div className="p-5 border-t border-[#C4A882]/20">
             <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">{post.content}</p>
@@ -224,6 +233,7 @@ export default function DashboardClient({
   // maps review.id → next due_date string, or null if this is the final review
   const [nextDueDateMap, setNextDueDateMap] = useState<Record<string, string | null>>({})
   const [formState, formAction, formPending] = useActionState(createPost, undefined)
+  const [imageCount, setImageCount] = useState(0)
 
   useEffect(() => {
     const t = new Date()
@@ -464,15 +474,21 @@ export default function DashboardClient({
 
               <div>
                 <label className="block text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-1">
-                  Image <span className="text-red-400">*</span>
+                  Images <span className="text-red-400">*</span>
+                  <span className="normal-case tracking-normal text-[#C4A882] ml-1">(1–5)</span>
                 </label>
                 <input
                   name="image"
                   type="file"
                   accept="image/*"
+                  multiple
                   required
+                  onChange={e => setImageCount(e.target.files?.length ?? 0)}
                   className="w-full border border-[#C4A882]/40 bg-white px-3 py-1.5 text-[#3A3028] text-sm file:mr-3 file:border-0 file:bg-[#1C3144] file:text-[#FAFAF7] file:text-xs file:tracking-widest file:uppercase file:px-3 file:py-1 file:cursor-pointer"
                 />
+                {imageCount > 5 && (
+                  <p className="text-xs text-red-600 mt-1">Maximum 5 images. Please remove {imageCount - 5}.</p>
+                )}
               </div>
 
               <div>

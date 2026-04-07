@@ -119,45 +119,80 @@ export async function createPost(_: unknown, formData: FormData) {
   const title = (formData.get('title') as string).trim()
   const content = (formData.get('content') as string).trim()
   const post_date = new Date().toISOString().split('T')[0] // always today on the server
-  const imageFile = formData.get('image') as File | null
 
-  // Validate image (H4: MIME check is server-side — accept="image/*" is UI-only)
   if (!title) return { error: 'Title is required.' }
-  if (!imageFile || imageFile.size === 0) return { error: 'Image is required.' }
-  if (imageFile.size > 10 * 1024 * 1024) return { error: 'Image must be under 10 MB.' }
-  if (!imageFile.type.startsWith('image/')) {
-    return { error: 'File must be an image (JPEG, PNG, etc.).' }
+
+  // --- Daily limit: max 3 posts per day, enforced server-side ---
+  const { count: todayCount } = await supabase
+    .from('posts')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('post_date', post_date)
+  if ((todayCount ?? 0) >= 3) {
+    return { error: 'You can only create 3 posts per day.' }
   }
 
-  // Sanitise the file extension — fall back to 'jpg' if the filename has no dot
-  const rawExt = imageFile.name.split('.').pop() ?? ''
-  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : 'jpg'
-
-  // Step 1 — upload image.
-  const storagePath = `${user.id}/${Date.now()}.${ext}`
-  const { error: uploadError } = await supabase.storage
-    .from('note-image')
-    .upload(storagePath, imageFile)
-  if (uploadError) {
-    return { error: `Image upload failed: ${uploadError.message}` }
+  // --- Image validation (H4: MIME check is server-side — accept="image/*" is UI-only) ---
+  const imageFiles = (formData.getAll('image') as File[]).filter(f => f.size > 0)
+  if (imageFiles.length === 0) return { error: 'At least 1 image is required.' }
+  if (imageFiles.length > 5) return { error: 'You can attach at most 5 images per post.' }
+  for (const f of imageFiles) {
+    if (f.size > 10 * 1024 * 1024) return { error: 'Each image must be under 10 MB.' }
+    if (!f.type.startsWith('image/')) {
+      return { error: 'All files must be images (JPEG, PNG, etc.).' }
+    }
   }
-  const { data: urlData } = supabase.storage.from('note-image').getPublicUrl(storagePath)
-  const image_url = urlData.publicUrl
 
-  // Step 2 — insert post row.
-  // On failure, delete the already-uploaded storage file so it doesn't remain orphaned.
+  // --- Step 1: Upload all images sequentially ---
+  // Keep track of uploaded paths for rollback on any failure.
+  const timestamp = Date.now()
+  const uploadedPaths: string[] = []
+  const imageRows: { storage_path: string; image_url: string; position: number }[] = []
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const imageFile = imageFiles[i]
+    const rawExt = imageFile.name.split('.').pop() ?? ''
+    const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : 'jpg'
+    const storagePath = `${user.id}/${timestamp}-${i}.${ext}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('note-image')
+      .upload(storagePath, imageFile)
+    if (uploadError) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from('note-image').remove(uploadedPaths)
+      }
+      return { error: `Image upload failed: ${uploadError.message}` }
+    }
+
+    uploadedPaths.push(storagePath)
+    const { data: urlData } = supabase.storage.from('note-image').getPublicUrl(storagePath)
+    imageRows.push({ storage_path: storagePath, image_url: urlData.publicUrl, position: i })
+  }
+
+  // --- Step 2: Insert post row (no image_url — images live in post_images) ---
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .insert({ user_id: user.id, title, content, post_date, image_url })
+    .insert({ user_id: user.id, title, content, post_date })
     .select()
     .single()
   if (postError || !post) {
-    await supabase.storage.from('note-image').remove([storagePath])
+    await supabase.storage.from('note-image').remove(uploadedPaths)
     return { error: postError?.message ?? 'Failed to create post' }
   }
 
-  // Step 3 — schedule reviews.
-  // On failure, roll back both the post row and the storage file.
+  // --- Step 3: Insert post_images rows ---
+  const { error: imagesError } = await supabase
+    .from('post_images')
+    .insert(imageRows.map(row => ({ ...row, post_id: post.id, user_id: user.id })))
+  if (imagesError) {
+    await supabase.from('posts').delete().eq('id', post.id).eq('user_id', user.id)
+    await supabase.storage.from('note-image').remove(uploadedPaths)
+    return { error: `Failed to save images: ${imagesError.message}` }
+  }
+
+  // --- Step 4: Schedule reviews ---
+  // On failure, roll back the post row (post_images cascade) and storage files.
   const reviewRows = schedulePostReviews(post_date, post.id, user.id)
   const { error: reviewsError } = await supabase
     .from('reviews')
@@ -165,7 +200,7 @@ export async function createPost(_: unknown, formData: FormData) {
   if (reviewsError) {
     console.error('[createPost] Review scheduling failed, rolling back:', reviewsError.message)
     await supabase.from('posts').delete().eq('id', post.id).eq('user_id', user.id)
-    await supabase.storage.from('note-image').remove([storagePath])
+    await supabase.storage.from('note-image').remove(uploadedPaths)
     return { error: `Failed to schedule reviews: ${reviewsError.message}` }
   }
 
@@ -178,10 +213,10 @@ export async function deletePost(postId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Fetch the post — RLS ensures only the owner can read it
+  // Fetch the post + its images — RLS ensures only the owner can read it
   const { data: post, error: fetchError } = await supabase
     .from('posts')
-    .select('id, user_id, image_url')
+    .select('id, user_id, image_url, post_images(storage_path)')
     .eq('id', postId)
     .eq('user_id', user.id)   // ownership check
     .single()
@@ -195,9 +230,14 @@ export async function deletePost(postId: string) {
     .eq('post_id', postId)
     .eq('user_id', user.id)
 
-  // Delete the storage image if one exists
-  if (post.image_url) {
-    // URL format: .../object/public/note-image/{user_id}/{filename}
+  // Delete storage files — use stored storage_path from post_images (no URL parsing)
+  const postImages = (post as typeof post & { post_images?: { storage_path: string }[] }).post_images ?? []
+  if (postImages.length > 0) {
+    const paths = postImages.map(img => img.storage_path)
+    const { error: storageError } = await supabase.storage.from('note-image').remove(paths)
+    if (storageError) console.error('Storage delete failed:', paths, storageError.message)
+  } else if (post.image_url) {
+    // Legacy fallback for posts created before the post_images table
     const marker = '/object/public/note-image/'
     const idx = post.image_url.indexOf(marker)
     if (idx !== -1) {
@@ -207,7 +247,7 @@ export async function deletePost(postId: string) {
     }
   }
 
-  // Delete the post row (RLS enforces ownership at DB level too)
+  // Delete the post row — cascades to post_images via FK ON DELETE CASCADE
   const { error: deleteError } = await supabase
     .from('posts')
     .delete()

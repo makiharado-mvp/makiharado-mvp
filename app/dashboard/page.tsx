@@ -25,10 +25,10 @@ export default async function DashboardPage({
     .lte('due_date', todayISO())
     .order('due_date', { ascending: true })
 
-  // All posts, newest first
+  // All posts with their images, newest first
   const { data: posts } = await supabase
     .from('posts')
-    .select('*')
+    .select('*, post_images(id, storage_path, image_url, position)')
     .eq('user_id', user.id)
     .order('post_date', { ascending: false })
     .order('created_at', { ascending: false })
