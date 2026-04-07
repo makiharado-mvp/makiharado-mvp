@@ -4,11 +4,12 @@ import LoginForm from '@/components/LoginForm'
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>
+  searchParams: Promise<{ next?: string; message?: string }>
 }) {
-  const { next } = await searchParams
+  const { next, message } = await searchParams
   // Only pass same-origin paths to prevent open redirect
   const nextPath = next?.startsWith('/') ? next : undefined
+  const accountDeleted = message === 'account-deleted'
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#FAFAF7' }}>
@@ -17,6 +18,13 @@ export default async function LoginPage({
           <p className="text-xs tracking-[6px] uppercase text-[#C4A882] mb-2">Makiharado</p>
           <h1 className="text-2xl text-[#1C3144]">Welcome back</h1>
         </div>
+        {accountDeleted && (
+          <div className="border border-[#C4A882]/30 px-4 py-3 mb-6 text-center">
+            <p className="text-xs text-[#8A7A6A] leading-relaxed">
+              Your account has been deleted. Thank you for using Makiharado.
+            </p>
+          </div>
+        )}
         <LoginForm nextPath={nextPath} />
         <p className="text-center text-xs text-[#8A7A6A] mt-6">
           No account?{' '}

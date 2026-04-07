@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { scheduleReviews, schedulePostReviews } from '@/lib/reviews'
 
 // ── Auth ──────────────────────────────────────────────────────
@@ -190,6 +191,94 @@ export async function deletePost(postId: string) {
   if (deleteError) return { error: deleteError.message }
 
   revalidatePath('/dashboard')
+}
+
+// ── Account deletion ──────────────────────────────────────────
+
+export async function deleteAccount(): Promise<{ error: string } | undefined> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const userId = user.id
+  const failures: string[] = []
+
+  // 1. Delete storage files — list the user's folder then bulk-remove
+  const { data: files, error: listError } = await supabase.storage
+    .from('note-image')
+    .list(userId)
+
+  if (listError) {
+    console.error(`[deleteAccount] Storage list failed for ${userId}:`, listError.message)
+    failures.push(`Storage list: ${listError.message}`)
+  } else if (files && files.length > 0) {
+    const paths = files.map(f => `${userId}/${f.name}`)
+    const { error: removeError } = await supabase.storage
+      .from('note-image')
+      .remove(paths)
+    if (removeError) {
+      console.error(`[deleteAccount] Storage remove failed for ${userId}:`, removeError.message)
+      failures.push(`Storage remove: ${removeError.message}`)
+    }
+  }
+
+  // 2. Delete reviews explicitly (safety — cascades from notes/posts may not cover all rows)
+  const { error: reviewsError } = await supabase
+    .from('reviews')
+    .delete()
+    .eq('user_id', userId)
+  if (reviewsError) {
+    console.error(`[deleteAccount] Reviews delete failed for ${userId}:`, reviewsError.message)
+    failures.push(`Reviews: ${reviewsError.message}`)
+  }
+
+  // 3. Delete posts (cascades any remaining post-linked reviews)
+  const { error: postsError } = await supabase
+    .from('posts')
+    .delete()
+    .eq('user_id', userId)
+  if (postsError) {
+    console.error(`[deleteAccount] Posts delete failed for ${userId}:`, postsError.message)
+    failures.push(`Posts: ${postsError.message}`)
+  }
+
+  // 4. Delete notes (cascades any remaining note-linked reviews)
+  const { error: notesError } = await supabase
+    .from('notes')
+    .delete()
+    .eq('user_id', userId)
+  if (notesError) {
+    console.error(`[deleteAccount] Notes delete failed for ${userId}:`, notesError.message)
+    failures.push(`Notes: ${notesError.message}`)
+  }
+
+  // 5. Delete user settings
+  const { error: settingsError } = await supabase
+    .from('user_settings')
+    .delete()
+    .eq('user_id', userId)
+  if (settingsError) {
+    console.error(`[deleteAccount] User settings delete failed for ${userId}:`, settingsError.message)
+    failures.push(`User settings: ${settingsError.message}`)
+  }
+
+  // Abort before touching auth if any data deletion failed —
+  // prevents orphaned rows with a deleted auth.users reference
+  if (failures.length > 0) {
+    return { error: `Account deletion failed. Please try again or contact support. (${failures.join('; ')})` }
+  }
+
+  // 6. Hard-delete the auth user — frees the email for re-registration
+  //    Requires service role key; runs server-side only
+  const adminClient = createAdminClient()
+  const { error: authError } = await adminClient.auth.admin.deleteUser(userId)
+  if (authError) {
+    console.error(`[deleteAccount] Auth user delete failed for ${userId}:`, authError.message)
+    return { error: `Failed to delete account credentials: ${authError.message}` }
+  }
+
+  // Session cookie will be invalidated by the proxy on next request
+  redirect('/login?message=account-deleted')
 }
 
 // ── Notifications ─────────────────────────────────────────────

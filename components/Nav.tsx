@@ -19,6 +19,12 @@ export default function Nav({ email }: { email: string }) {
           >
             Home
           </Link>
+          <Link
+            href="/settings"
+            className="text-xs tracking-widest uppercase text-[#C4A882]/60 hover:text-[#8A7A6A] transition-colors"
+          >
+            Settings
+          </Link>
           <form action={signOut}>
             <button
               type="submit"
