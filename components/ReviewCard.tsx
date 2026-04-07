@@ -8,10 +8,22 @@ import type { Review } from '@/types'
 export default function ReviewCard({ review, initialOpen }: { review: Review; initialOpen?: boolean }) {
   const [open, setOpen] = useState(initialOpen ?? false)
   const [pending, startTransition] = useTransition()
+  const [completeError, setCompleteError] = useState<string | null>(null)
+
+  // Support both note-linked and post-linked reviews
+  const source = review.notes ?? review.posts
+  const title = source?.title ?? '—'
+  const imageUrl = source?.image_url ?? null
+  const content = source?.content ?? null
 
   function handleComplete() {
+    setCompleteError(null)
     startTransition(async () => {
-      await completeReview(review.id)
+      const result = await completeReview(review.id)
+      if (result?.error) {
+        setCompleteError(result.error)
+        return
+      }
       setOpen(false)
     })
   }
@@ -28,7 +40,7 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
             onClick={() => setOpen(true)}
             className="text-[#1C3144] font-medium truncate w-full text-left hover:underline underline-offset-2 decoration-[#C4A882]"
           >
-            {review.notes?.title ?? '—'}
+            {title}
           </button>
         </div>
         <button
@@ -39,6 +51,11 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
           {pending ? '...' : 'Done'}
         </button>
       </div>
+
+      {/* Inline error shown on the card row if completeReview fails */}
+      {completeError && (
+        <p className="text-xs text-red-600 px-4 pb-2">{completeError}</p>
+      )}
 
       {/* Modal */}
       {open && (
@@ -57,7 +74,7 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
                 <span className="text-[10px] tracking-widest uppercase text-[#C4A882] block mb-1">
                   {intervalLabel(review.interval_day)}
                 </span>
-                <h2 className="text-[#1C3144] font-medium">{review.notes?.title}</h2>
+                <h2 className="text-[#1C3144] font-medium">{title}</h2>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -68,24 +85,27 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
             </div>
 
             {/* Image */}
-            {review.notes?.image_url && (
+            {imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={review.notes.image_url}
-                alt="Note image"
+                src={imageUrl}
+                alt={title}
                 className="w-full object-contain"
               />
             )}
 
             {/* Content */}
-            {review.notes?.content && (
+            {content && (
               <p className="text-sm text-[#3A3028] leading-relaxed p-5 border-t border-[#C4A882]/20">
-                {review.notes.content}
+                {content}
               </p>
             )}
 
-            {/* Done button */}
-            <div className="p-5 border-t border-[#C4A882]/20">
+            {/* Done button + error */}
+            <div className="p-5 border-t border-[#C4A882]/20 space-y-2">
+              {completeError && (
+                <p className="text-xs text-red-600">{completeError}</p>
+              )}
               <button
                 onClick={handleComplete}
                 disabled={pending}

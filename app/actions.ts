@@ -54,42 +54,56 @@ export async function createNote(_: unknown, formData: FormData) {
   const content = (formData.get('content') as string).trim()
   const imageFile = formData.get('image') as File | null
 
-  // Image is required and must be under 10 MB
+  // Validate image (H4: MIME check is server-side — accept="image/*" is UI-only)
   if (!imageFile || imageFile.size === 0) {
     return { error: 'Please attach an image of your handwritten note.' }
   }
   if (imageFile.size > 10 * 1024 * 1024) {
     return { error: 'Image must be under 10 MB.' }
   }
-
-  let image_url: string | null = null
-
-  if (imageFile && imageFile.size > 0) {
-    const ext = imageFile.name.split('.').pop()
-    const path = `${user.id}/${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage
-      .from('note-image')
-      .upload(path, imageFile)
-
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage
-        .from('note-image')
-        .getPublicUrl(path)
-      image_url = urlData.publicUrl
-    }
+  if (!imageFile.type.startsWith('image/')) {
+    return { error: 'File must be an image (JPEG, PNG, etc.).' }
   }
 
-  const { data: note, error } = await supabase
+  // Sanitise the file extension — fall back to 'jpg' if the filename has no dot
+  const rawExt = imageFile.name.split('.').pop() ?? ''
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : 'jpg'
+
+  // Step 1 — upload image.
+  // Must happen before the DB insert so we have the URL.
+  // If this fails, nothing else has been created — safe to return immediately.
+  const storagePath = `${user.id}/${Date.now()}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('note-image')
+    .upload(storagePath, imageFile)
+  if (uploadError) {
+    return { error: `Image upload failed: ${uploadError.message}` }
+  }
+  const { data: urlData } = supabase.storage.from('note-image').getPublicUrl(storagePath)
+  const image_url = urlData.publicUrl
+
+  // Step 2 — insert note row.
+  // On failure, delete the already-uploaded storage file so it doesn't remain orphaned.
+  const { data: note, error: noteError } = await supabase
     .from('notes')
     .insert({ user_id: user.id, title, content, image_url })
     .select()
     .single()
+  if (noteError || !note) {
+    await supabase.storage.from('note-image').remove([storagePath])
+    return { error: noteError?.message ?? 'Failed to create note' }
+  }
 
-  if (error || !note) return { error: error?.message ?? 'Failed to create note' }
-
-  // Schedule all 5 review dates at midnight
+  // Step 3 — schedule reviews.
+  // On failure, roll back both the note row and the storage file.
   const reviewRows = scheduleReviews(new Date(), note.id, user.id)
-  await supabase.from('reviews').insert(reviewRows)
+  const { error: reviewsError } = await supabase.from('reviews').insert(reviewRows)
+  if (reviewsError) {
+    console.error('[createNote] Review scheduling failed, rolling back:', reviewsError.message)
+    await supabase.from('notes').delete().eq('id', note.id).eq('user_id', user.id)
+    await supabase.storage.from('note-image').remove([storagePath])
+    return { error: `Failed to schedule reviews: ${reviewsError.message}` }
+  }
 
   revalidatePath('/dashboard')
   redirect('/dashboard')
@@ -107,42 +121,53 @@ export async function createPost(_: unknown, formData: FormData) {
   const post_date = new Date().toISOString().split('T')[0] // always today on the server
   const imageFile = formData.get('image') as File | null
 
+  // Validate image (H4: MIME check is server-side — accept="image/*" is UI-only)
   if (!title) return { error: 'Title is required.' }
   if (!imageFile || imageFile.size === 0) return { error: 'Image is required.' }
   if (imageFile.size > 10 * 1024 * 1024) return { error: 'Image must be under 10 MB.' }
-
-  let image_url: string | null = null
-
-  if (imageFile && imageFile.size > 0) {
-    const ext = imageFile.name.split('.').pop()
-    const path = `${user.id}/${Date.now()}.${ext}`
-    const { error: uploadError } = await supabase.storage
-      .from('note-image')
-      .upload(path, imageFile)
-
-    if (uploadError) {
-      return { error: `Image upload failed: ${uploadError.message}` }
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('note-image')
-      .getPublicUrl(path)
-    image_url = urlData.publicUrl
+  if (!imageFile.type.startsWith('image/')) {
+    return { error: 'File must be an image (JPEG, PNG, etc.).' }
   }
 
-  const { data: post, error } = await supabase
+  // Sanitise the file extension — fall back to 'jpg' if the filename has no dot
+  const rawExt = imageFile.name.split('.').pop() ?? ''
+  const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : 'jpg'
+
+  // Step 1 — upload image.
+  const storagePath = `${user.id}/${Date.now()}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('note-image')
+    .upload(storagePath, imageFile)
+  if (uploadError) {
+    return { error: `Image upload failed: ${uploadError.message}` }
+  }
+  const { data: urlData } = supabase.storage.from('note-image').getPublicUrl(storagePath)
+  const image_url = urlData.publicUrl
+
+  // Step 2 — insert post row.
+  // On failure, delete the already-uploaded storage file so it doesn't remain orphaned.
+  const { data: post, error: postError } = await supabase
     .from('posts')
     .insert({ user_id: user.id, title, content, post_date, image_url })
     .select()
     .single()
+  if (postError || !post) {
+    await supabase.storage.from('note-image').remove([storagePath])
+    return { error: postError?.message ?? 'Failed to create post' }
+  }
 
-  if (error || !post) return { error: error?.message ?? 'Failed to create post' }
-
-  // Schedule review records for this post (ignore duplicates)
+  // Step 3 — schedule reviews.
+  // On failure, roll back both the post row and the storage file.
   const reviewRows = schedulePostReviews(post_date, post.id, user.id)
-  await supabase
+  const { error: reviewsError } = await supabase
     .from('reviews')
     .upsert(reviewRows, { onConflict: 'post_id,interval_day', ignoreDuplicates: true })
+  if (reviewsError) {
+    console.error('[createPost] Review scheduling failed, rolling back:', reviewsError.message)
+    await supabase.from('posts').delete().eq('id', post.id).eq('user_id', user.id)
+    await supabase.storage.from('note-image').remove([storagePath])
+    return { error: `Failed to schedule reviews: ${reviewsError.message}` }
+  }
 
   revalidatePath('/dashboard')
   redirect(`/dashboard?date=${post_date}`)
@@ -336,14 +361,18 @@ export async function toggleNotifications(enabled: boolean) {
 
 // ── Reviews ───────────────────────────────────────────────────
 
-export async function completeReview(reviewId: string) {
+export async function completeReview(reviewId: string): Promise<{ error: string } | undefined> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  await supabase
+  if (!user) return { error: 'Not signed in.' }
+  const { error } = await supabase
     .from('reviews')
     .update({ completed_at: new Date().toISOString() })
     .eq('id', reviewId)
     .eq('user_id', user.id)
+  if (error) {
+    console.error('[completeReview] Failed:', error.message)
+    return { error: 'Failed to mark review as done. Please try again.' }
+  }
   revalidatePath('/dashboard')
 }
