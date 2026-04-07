@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition, useActionState } from 'react'
-import { createPost, toggleNotifications } from '@/app/actions'
+import { createPost, deletePost, toggleNotifications } from '@/app/actions'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
 import type { Post, Review } from '@/types'
@@ -60,6 +60,23 @@ function formatDate(iso: string, opts: Intl.DateTimeFormatOptions) {
 }
 
 function PostDetailModal({ post, onClose }: { post: Post; onClose: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete() {
+    setDeleting(true)
+    setDeleteError(null)
+    const result = await deletePost(post.id)
+    if (result?.error) {
+      setDeleteError(result.error)
+      setDeleting(false)
+      setConfirming(false)
+    } else {
+      onClose()
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -94,6 +111,42 @@ function PostDetailModal({ post, onClose }: { post: Post; onClose: () => void })
             <p className="text-sm text-[#3A3028] leading-relaxed whitespace-pre-wrap">{post.content}</p>
           </div>
         )}
+
+        {/* Delete section */}
+        <div className="px-5 py-4 border-t border-[#C4A882]/20 flex items-center justify-between gap-3">
+          {deleteError && (
+            <p className="text-xs text-red-600">{deleteError}</p>
+          )}
+          {!confirming ? (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="ml-auto text-[10px] tracking-widest uppercase text-[#8A7A6A]/60 hover:text-red-500 transition-colors"
+            >
+              Delete post
+            </button>
+          ) : (
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-[10px] text-[#8A7A6A]">Are you sure?</span>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+                className="text-[10px] tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-[10px] tracking-widest uppercase text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Confirm'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

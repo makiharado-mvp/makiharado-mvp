@@ -137,6 +137,51 @@ export async function createPost(_: unknown, formData: FormData) {
   redirect(`/dashboard?date=${post_date}`)
 }
 
+export async function deletePost(postId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  // Fetch the post — RLS ensures only the owner can read it
+  const { data: post, error: fetchError } = await supabase
+    .from('posts')
+    .select('id, user_id, image_url')
+    .eq('id', postId)
+    .eq('user_id', user.id)   // ownership check
+    .single()
+
+  if (fetchError || !post) return { error: 'Post not found or access denied.' }
+
+  // Delete related review records (reviews.post_id has no cascade in the DB)
+  await supabase
+    .from('reviews')
+    .delete()
+    .eq('post_id', postId)
+    .eq('user_id', user.id)
+
+  // Delete the storage image if one exists
+  if (post.image_url) {
+    // URL format: .../object/public/note-image/{user_id}/{filename}
+    const marker = '/object/public/note-image/'
+    const idx = post.image_url.indexOf(marker)
+    if (idx !== -1) {
+      const storagePath = post.image_url.slice(idx + marker.length)
+      await supabase.storage.from('note-image').remove([storagePath])
+    }
+  }
+
+  // Delete the post row (RLS enforces ownership at DB level too)
+  const { error: deleteError } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+    .eq('user_id', user.id)
+
+  if (deleteError) return { error: deleteError.message }
+
+  revalidatePath('/dashboard')
+}
+
 // ── Notifications ─────────────────────────────────────────────
 
 export async function toggleNotifications(enabled: boolean) {
