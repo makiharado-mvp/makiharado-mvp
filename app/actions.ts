@@ -197,103 +197,119 @@ export async function deletePost(postId: string) {
 // ── Account deletion ──────────────────────────────────────────
 
 export async function deleteAccount(): Promise<{ error: string } | undefined> {
+  // Require the service role key upfront — it is needed for both data
+  // deletion (bypassing RLS) and auth.admin.deleteUser().
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[deleteAccount] SUPABASE_SERVICE_ROLE_KEY is not set')
+    return { error: 'Server configuration error: account deletion is unavailable. Please contact support.' }
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const userId = user.id
-  const failures: string[] = []
 
-  // 1. Delete storage files — list the user's folder then bulk-remove
-  const { data: files, error: listError } = await supabase.storage
-    .from('note-image')
-    .list(userId)
+  // Use the admin client (service_role key) for ALL data deletions.
+  // The user-session client goes through RLS and can silently delete 0 rows
+  // if the session context is off — leaving FK-blocking rows behind and
+  // causing auth.admin.deleteUser() to fail with a database error.
+  // The admin client bypasses RLS entirely and surfaces real Postgres errors.
+  const admin = createAdminClient()
 
-  if (listError) {
-    console.error(`[deleteAccount] Storage list failed for ${userId}:`, listError.message)
-    failures.push(`Storage list: ${listError.message}`)
-  } else if (files && files.length > 0) {
-    const paths = files.map(f => `${userId}/${f.name}`)
-    const { error: removeError } = await supabase.storage
-      .from('note-image')
-      .remove(paths)
-    if (removeError) {
-      console.error(`[deleteAccount] Storage remove failed for ${userId}:`, removeError.message)
-      failures.push(`Storage remove: ${removeError.message}`)
-    }
-  }
-
-  // 2. Delete reviews explicitly (safety — cascades from notes/posts may not cover all rows)
-  const { error: reviewsError } = await supabase
+  // Step 1 — reviews (must go first: references notes and posts via FK)
+  const { error: reviewsError } = await admin
     .from('reviews')
     .delete()
     .eq('user_id', userId)
   if (reviewsError) {
     console.error(`[deleteAccount] Reviews delete failed for ${userId}:`, reviewsError.message)
-    failures.push(`Reviews: ${reviewsError.message}`)
+    return { error: `Failed to delete reviews: ${reviewsError.message}` }
   }
 
-  // 3. Delete posts (cascades any remaining post-linked reviews)
-  const { error: postsError } = await supabase
+  // Step 2 — posts
+  const { error: postsError } = await admin
     .from('posts')
     .delete()
     .eq('user_id', userId)
   if (postsError) {
     console.error(`[deleteAccount] Posts delete failed for ${userId}:`, postsError.message)
-    failures.push(`Posts: ${postsError.message}`)
+    return { error: `Failed to delete posts: ${postsError.message}` }
   }
 
-  // 4. Delete notes (cascades any remaining note-linked reviews)
-  const { error: notesError } = await supabase
+  // Step 3 — notes
+  const { error: notesError } = await admin
     .from('notes')
     .delete()
     .eq('user_id', userId)
   if (notesError) {
     console.error(`[deleteAccount] Notes delete failed for ${userId}:`, notesError.message)
-    failures.push(`Notes: ${notesError.message}`)
+    return { error: `Failed to delete notes: ${notesError.message}` }
   }
 
-  // 5. Delete user settings
-  const { error: settingsError } = await supabase
+  // Step 4 — user settings
+  const { error: settingsError } = await admin
     .from('user_settings')
     .delete()
     .eq('user_id', userId)
   if (settingsError) {
     console.error(`[deleteAccount] User settings delete failed for ${userId}:`, settingsError.message)
-    failures.push(`User settings: ${settingsError.message}`)
+    return { error: `Failed to delete user settings: ${settingsError.message}` }
   }
 
-  // Abort before touching auth if any data deletion failed —
-  // prevents orphaned rows with a deleted auth.users reference
-  if (failures.length > 0) {
-    return { error: `Account deletion failed. Please try again or contact support. (${failures.join('; ')})` }
+  // Step 5 — storage files (best-effort; non-fatal if folder is empty or missing)
+  const { data: files, error: listError } = await admin.storage
+    .from('note-image')
+    .list(userId)
+  if (listError) {
+    console.error(`[deleteAccount] Storage list failed for ${userId}:`, listError.message)
+    return { error: `Failed to list storage files: ${listError.message}` }
+  }
+  if (files && files.length > 0) {
+    const paths = files.map(f => `${userId}/${f.name}`)
+    const { error: removeError } = await admin.storage
+      .from('note-image')
+      .remove(paths)
+    if (removeError) {
+      console.error(`[deleteAccount] Storage remove failed for ${userId}:`, removeError.message)
+      return { error: `Failed to delete storage files: ${removeError.message}` }
+    }
   }
 
-  // 6. Sign out BEFORE deleting the auth user.
-  //    signOut() must be called while the session is still valid so that:
-  //    (a) Supabase can revoke the refresh token server-side, and
-  //    (b) the @supabase/ssr client can successfully write the cleared
-  //        cookie into the response (it cannot do so after deleteUser()
-  //        rejects the session as belonging to a non-existent user).
+  // Step 6 — verify no app rows remain before touching auth.users.
+  // If any count is > 0, stop immediately with a clear error rather than
+  // letting deleteUser() fail with an opaque database FK error.
+  const [rCount, pCount, nCount, sCount] = await Promise.all([
+    admin.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    admin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    admin.from('notes').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+    admin.from('user_settings').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+  ])
+  const remaining = [
+    rCount.count ? `reviews(${rCount.count})` : null,
+    pCount.count ? `posts(${pCount.count})` : null,
+    nCount.count ? `notes(${nCount.count})` : null,
+    sCount.count ? `user_settings(${sCount.count})` : null,
+  ].filter(Boolean)
+  if (remaining.length > 0) {
+    console.error(`[deleteAccount] Rows still remain for ${userId}: ${remaining.join(', ')}`)
+    return { error: `Account deletion incomplete — rows still remain: ${remaining.join(', ')}. Please try again or contact support.` }
+  }
+
+  // Step 7 — hard-delete the auth user (frees the email for re-registration)
+  const { error: authError } = await admin.auth.admin.deleteUser(userId)
+  if (authError) {
+    console.error(`[deleteAccount] Auth user delete failed for ${userId}:`, authError.message)
+    return { error: `Failed to delete account: ${authError.message}` }
+  }
+
+  // Step 8 — clear the session now that the auth user is gone
   await supabase.auth.signOut()
-
-  // 7. Belt-and-suspenders: directly expire all sb-* cookies via the
-  //    Next.js cookies() API. This handles the edge case where signOut()
-  //    above still fails silently (e.g. network hiccup to Supabase).
   const cookieStore = await cookies()
   for (const cookie of cookieStore.getAll()) {
     if (cookie.name.startsWith('sb-')) {
       cookieStore.set(cookie.name, '', { maxAge: 0, path: '/' })
     }
-  }
-
-  // 8. Hard-delete the auth user — frees the email for re-registration.
-  //    Uses service role key (SUPABASE_SERVICE_ROLE_KEY); runs server-side only.
-  const adminClient = createAdminClient()
-  const { error: authError } = await adminClient.auth.admin.deleteUser(userId)
-  if (authError) {
-    console.error(`[deleteAccount] Auth user delete failed for ${userId}:`, authError.message)
-    return { error: `Failed to delete account credentials: ${authError.message}` }
   }
 
   redirect('/login?message=account-deleted')
