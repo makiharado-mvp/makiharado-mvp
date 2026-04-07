@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { scheduleReviews, schedulePostReviews } from '@/lib/reviews'
@@ -268,21 +269,32 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
     return { error: `Account deletion failed. Please try again or contact support. (${failures.join('; ')})` }
   }
 
-  // 6. Hard-delete the auth user — frees the email for re-registration
-  //    Requires service role key; runs server-side only
+  // 6. Sign out BEFORE deleting the auth user.
+  //    signOut() must be called while the session is still valid so that:
+  //    (a) Supabase can revoke the refresh token server-side, and
+  //    (b) the @supabase/ssr client can successfully write the cleared
+  //        cookie into the response (it cannot do so after deleteUser()
+  //        rejects the session as belonging to a non-existent user).
+  await supabase.auth.signOut()
+
+  // 7. Belt-and-suspenders: directly expire all sb-* cookies via the
+  //    Next.js cookies() API. This handles the edge case where signOut()
+  //    above still fails silently (e.g. network hiccup to Supabase).
+  const cookieStore = await cookies()
+  for (const cookie of cookieStore.getAll()) {
+    if (cookie.name.startsWith('sb-')) {
+      cookieStore.set(cookie.name, '', { maxAge: 0, path: '/' })
+    }
+  }
+
+  // 8. Hard-delete the auth user — frees the email for re-registration.
+  //    Uses service role key (SUPABASE_SERVICE_ROLE_KEY); runs server-side only.
   const adminClient = createAdminClient()
   const { error: authError } = await adminClient.auth.admin.deleteUser(userId)
   if (authError) {
     console.error(`[deleteAccount] Auth user delete failed for ${userId}:`, authError.message)
     return { error: `Failed to delete account credentials: ${authError.message}` }
   }
-
-  // Explicitly sign out to clear the session cookie from the browser.
-  // auth.admin.deleteUser() revokes the refresh token but does not invalidate
-  // the existing JWT access token (valid up to 1 hour). Without this call,
-  // the proxy would see a still-valid JWT and auto-redirect back to /dashboard.
-  // signOut() clears the cookie even if the server-side revocation call fails.
-  await supabase.auth.signOut()
 
   redirect('/login?message=account-deleted')
 }
