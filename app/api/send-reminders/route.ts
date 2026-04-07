@@ -13,20 +13,20 @@ function escapeHtml(str: string) {
 
 async function sendReminderEmail(
   to: string,
-  notes: { title: string; noteId: string }[],
-  appUrl: string
+  items: { title: string; href: string }[],
+  _appUrl: string
 ) {
   const resend = new Resend(process.env.RESEND_API_KEY)
 
-  const linksHtml = notes
+  const linksHtml = items
     .map(
       n =>
-        `<p><a href="${appUrl}/dashboard?note=${n.noteId}" style="color:#1C3144;">${escapeHtml(n.title)}</a></p>`
+        `<p><a href="${n.href}" style="color:#1C3144;">${escapeHtml(n.title)}</a></p>`
     )
     .join('')
 
-  const linksText = notes
-    .map(n => `${n.title}\n${appUrl}/dashboard?note=${n.noteId}`)
+  const linksText = items
+    .map(n => `${n.title}\n${n.href}`)
     .join('\n\n')
 
   await resend.emails.send({
@@ -65,21 +65,28 @@ export async function GET(request: Request) {
 
   const userIds = settings.map(s => s.user_id)
 
-  // 2. Find uncompleted reviews due today, join note title
+  // 2. Find uncompleted reviews due today — join both notes and posts titles
   const { data: dueReviews } = await supabase
     .from('reviews')
-    .select('user_id, note_id, notes(title)')
+    .select('user_id, note_id, post_id, notes(title), posts(title)')
     .in('user_id', userIds)
     .eq('due_date', today)
     .is('completed_at', null)
 
   if (!dueReviews?.length) return Response.json({ sent: 0 })
 
-  // 3. Group notes by user
-  const byUser = new Map<string, { title: string; noteId: string }[]>()
+  // 3. Group items by user
+  type ReviewEntry = { title: string; href: string }
+  const byUser = new Map<string, ReviewEntry[]>()
   for (const review of dueReviews) {
-    const title = (review.notes as unknown as { title: string } | null)?.title ?? 'Note'
-    const entry = { title, noteId: review.note_id }
+    const noteTitle = (review.notes as unknown as { title: string } | null)?.title
+    const postTitle = (review.posts as unknown as { title: string } | null)?.title
+    const title = noteTitle ?? postTitle ?? 'Untitled'
+    // Note reviews deep-link to the review card; post reviews link to dashboard
+    const href = review.note_id
+      ? `${appUrl}/dashboard?note=${review.note_id}`
+      : `${appUrl}/dashboard`
+    const entry: ReviewEntry = { title, href }
     const existing = byUser.get(review.user_id)
     if (existing) existing.push(entry)
     else byUser.set(review.user_id, [entry])
@@ -91,7 +98,7 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.admin.getUserById(userId)
     if (!user?.email) continue
     try {
-      await sendReminderEmail(user.email, notes, appUrl)
+      await sendReminderEmail(user.email, notes, appUrl)  // appUrl kept for signature compat
       sent++
     } catch {
       console.error(`Failed to send reminder to user ${userId}`)

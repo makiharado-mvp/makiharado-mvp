@@ -44,6 +44,12 @@ export default function SignupPage() {
             <p className="text-xs text-red-600">{state.error}</p>
           )}
 
+          {'success' in (state ?? {}) && (
+            <p className="text-xs text-[#1C3144] border border-[#C4A882]/40 px-3 py-2 leading-relaxed">
+              {(state as { success: string }).success}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={pending}

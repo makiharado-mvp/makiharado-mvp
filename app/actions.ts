@@ -22,11 +22,16 @@ export async function signIn(_: unknown, formData: FormData) {
 
 export async function signUp(_: unknown, formData: FormData) {
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: formData.get('email') as string,
     password: formData.get('password') as string,
   })
   if (error) return { error: error.message }
+  // If email confirmation is enabled in Supabase, session will be null
+  // until the user clicks the confirmation link.
+  if (!data.session) {
+    return { success: 'Account created. Please check your email and confirm your address before signing in.' }
+  }
   redirect('/dashboard')
 }
 
@@ -47,9 +52,12 @@ export async function createNote(_: unknown, formData: FormData) {
   const content = (formData.get('content') as string).trim()
   const imageFile = formData.get('image') as File | null
 
-  // Image is required
+  // Image is required and must be under 10 MB
   if (!imageFile || imageFile.size === 0) {
     return { error: 'Please attach an image of your handwritten note.' }
+  }
+  if (imageFile.size > 10 * 1024 * 1024) {
+    return { error: 'Image must be under 10 MB.' }
   }
 
   let image_url: string | null = null
@@ -99,6 +107,7 @@ export async function createPost(_: unknown, formData: FormData) {
 
   if (!title) return { error: 'Title is required.' }
   if (!imageFile || imageFile.size === 0) return { error: 'Image is required.' }
+  if (imageFile.size > 10 * 1024 * 1024) return { error: 'Image must be under 10 MB.' }
 
   let image_url: string | null = null
 
@@ -166,7 +175,8 @@ export async function deletePost(postId: string) {
     const idx = post.image_url.indexOf(marker)
     if (idx !== -1) {
       const storagePath = post.image_url.slice(idx + marker.length)
-      await supabase.storage.from('note-image').remove([storagePath])
+      const { error: storageError } = await supabase.storage.from('note-image').remove([storagePath])
+      if (storageError) console.error('Storage delete failed:', storagePath, storageError.message)
     }
   }
 

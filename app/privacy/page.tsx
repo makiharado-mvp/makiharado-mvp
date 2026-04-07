@@ -68,10 +68,10 @@ export default function PrivacyPage() {
             <h2 className="text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-3">Infrastructure</h2>
             <p>
               Makiharado is built on{' '}
-              <span className="text-[#1C3144]">Supabase</span> (database and file storage)
-              and{' '}
-              <span className="text-[#1C3144]">Vercel</span> (hosting). Reminder emails are
-              sent via Gmail. Your data is processed and stored on their infrastructure.
+              <span className="text-[#1C3144]">Supabase</span> (database and file storage),{' '}
+              <span className="text-[#1C3144]">Vercel</span> (hosting), and{' '}
+              <span className="text-[#1C3144]">Resend</span> (transactional email). Your data
+              is processed and stored on their infrastructure.
               We do not intentionally share your personal data with any other third parties.
             </p>
           </section>
