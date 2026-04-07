@@ -277,23 +277,30 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
   }
 
   // Step 6 — verify no app rows remain before touching auth.users.
-  // If any count is > 0, stop immediately with a clear error rather than
-  // letting deleteUser() fail with an opaque database FK error.
-  const [rCount, pCount, nCount, sCount] = await Promise.all([
-    admin.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-    admin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-    admin.from('notes').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-    admin.from('user_settings').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-  ])
-  const remaining = [
-    rCount.count ? `reviews(${rCount.count})` : null,
-    pCount.count ? `posts(${pCount.count})` : null,
-    nCount.count ? `notes(${nCount.count})` : null,
-    sCount.count ? `user_settings(${sCount.count})` : null,
-  ].filter(Boolean)
-  if (remaining.length > 0) {
-    console.error(`[deleteAccount] Rows still remain for ${userId}: ${remaining.join(', ')}`)
-    return { error: `Account deletion incomplete — rows still remain: ${remaining.join(', ')}. Please try again or contact support.` }
+  // Fail immediately if any count > 0 OR if a count query itself fails.
+  // A null/errored count is treated as unsafe (not as zero) so we never
+  // silently proceed to deleteUser() with unknown remaining state.
+  const verifyTables = ['reviews', 'posts', 'notes', 'user_settings'] as const
+  const verifyCounts = await Promise.all(
+    verifyTables.map(t =>
+      admin.from(t).select('*', { count: 'exact', head: true }).eq('user_id', userId)
+    )
+  )
+  for (let i = 0; i < verifyTables.length; i++) {
+    const { count, error } = verifyCounts[i]
+    const table = verifyTables[i]
+    if (error) {
+      console.error(`[deleteAccount] Verification query failed for ${table} (${userId}):`, error.message)
+      return { error: `Account deletion blocked: could not verify ${table} — ${error.message}` }
+    }
+    if (typeof count !== 'number') {
+      console.error(`[deleteAccount] Unexpected null count for ${table} (${userId})`)
+      return { error: `Account deletion blocked: unexpected response verifying ${table}` }
+    }
+    if (count > 0) {
+      console.error(`[deleteAccount] ${table} still has ${count} row(s) for ${userId}`)
+      return { error: `Account deletion blocked: ${table} still has ${count} row(s)` }
+    }
   }
 
   // Step 7 — hard-delete the auth user (frees the email for re-registration)
