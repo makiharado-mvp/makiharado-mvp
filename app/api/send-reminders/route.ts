@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import nodemailer from 'nodemailer'
+import { Resend } from 'resend'
 
 export const runtime = 'nodejs'
 
@@ -11,22 +11,12 @@ function escapeHtml(str: string) {
     .replace(/"/g, '&quot;')
 }
 
-function createTransport() {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  })
-}
-
 async function sendReminderEmail(
   to: string,
   notes: { title: string; noteId: string }[],
   appUrl: string
 ) {
-  const transporter = createTransport()
+  const resend = new Resend(process.env.RESEND_API_KEY)
 
   const linksHtml = notes
     .map(
@@ -39,10 +29,10 @@ async function sendReminderEmail(
     .map(n => `${n.title}\n${appUrl}/dashboard?note=${n.noteId}`)
     .join('\n\n')
 
-  await transporter.sendMail({
-    from: process.env.GMAIL_USER,
+  await resend.emails.send({
+    from: 'Makiharado <reminders@makiharado.com>',
     to,
-    subject: 'Review Reminder',
+    subject: 'Review Reminder — Makiharado',
     text: `You have a note to review.\n\nClick below to see:\n\n${linksText}`,
     html: `
       <p>You have a note to review.</p>
