@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // After client-side compression, each image is typically well under 500 KB.
-  // 6 MB gives comfortable headroom for 5 images + HEIC files that bypass compression.
-  serverActions: {
-    bodySizeLimit: '6mb',
+  experimental: {
+    // After client-side compression, each image is typically well under 500 KB.
+    // 6 MB gives comfortable headroom for 5 images + HEIC files that bypass compression.
+    serverActions: {
+      bodySizeLimit: '6mb',
+    },
   },
   images: {
     remotePatterns: [
