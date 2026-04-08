@@ -111,6 +111,46 @@ export async function createNote(_: unknown, formData: FormData) {
 
 // ── Posts ─────────────────────────────────────────────────────
 
+// Allowed image file extensions (used as fallback when browser MIME type is unreliable,
+// e.g. HEIC/HEIF on Chrome/Windows often reports as empty or application/octet-stream).
+const ALLOWED_IMAGE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'avif', 'bmp', 'tiff', 'tif',
+])
+
+// Explicit MIME map so we can set contentType on Supabase upload even when the browser
+// reports an incorrect or empty type.
+const EXT_TO_MIME: Record<string, string> = {
+  jpg:  'image/jpeg',
+  jpeg: 'image/jpeg',
+  png:  'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  gif:  'image/gif',
+  avif: 'image/avif',
+  bmp:  'image/bmp',
+  tiff: 'image/tiff',
+  tif:  'image/tiff',
+}
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5 MB
+
+/** Returns an error string if the file is not an acceptable image, otherwise null. */
+function validateImageFile(file: File): string | null {
+  if (file.size > MAX_IMAGE_BYTES) {
+    return `"${file.name}" is too large (max 5 MB per image).`
+  }
+  const rawExt = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const extOk  = ALLOWED_IMAGE_EXTENSIONS.has(rawExt)
+  const mimeOk = file.type.startsWith('image/')
+  // Accept if EITHER the MIME type or the file extension is a known image format.
+  // This handles HEIC files on browsers that misreport the MIME type.
+  if (!extOk && !mimeOk) {
+    return `"${file.name}" is not a recognised image format (JPEG, PNG, WEBP, HEIC, etc.).`
+  }
+  return null
+}
+
 export async function createPost(_: unknown, formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -132,15 +172,13 @@ export async function createPost(_: unknown, formData: FormData) {
     return { error: 'You can only create 3 posts per day.' }
   }
 
-  // --- Image validation (H4: MIME check is server-side — accept="image/*" is UI-only) ---
+  // --- Image validation: extension + MIME (server-side, accept="image/*" is UI-only) ---
   const imageFiles = (formData.getAll('image') as File[]).filter(f => f.size > 0)
   if (imageFiles.length === 0) return { error: 'At least 1 image is required.' }
   if (imageFiles.length > 5) return { error: 'You can attach at most 5 images per post.' }
   for (const f of imageFiles) {
-    if (f.size > 10 * 1024 * 1024) return { error: 'Each image must be under 10 MB.' }
-    if (!f.type.startsWith('image/')) {
-      return { error: 'All files must be images (JPEG, PNG, etc.).' }
-    }
+    const validationError = validateImageFile(f)
+    if (validationError) return { error: validationError }
   }
 
   // --- Step 1: Upload all images sequentially ---
@@ -151,18 +189,24 @@ export async function createPost(_: unknown, formData: FormData) {
 
   for (let i = 0; i < imageFiles.length; i++) {
     const imageFile = imageFiles[i]
-    const rawExt = imageFile.name.split('.').pop() ?? ''
-    const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt.toLowerCase() : 'jpg'
+    const rawExt = imageFile.name.split('.').pop()?.toLowerCase() ?? ''
+    const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : 'jpg'
     const storagePath = `${user.id}/${timestamp}-${i}.${ext}`
+    // Use the known MIME for the extension when the browser reports an incorrect type
+    // (e.g. HEIC on Chrome/Windows). Falls back to the browser-reported type, then octet-stream.
+    const contentType = imageFile.type.startsWith('image/')
+      ? imageFile.type
+      : (EXT_TO_MIME[ext] ?? 'application/octet-stream')
 
     const { error: uploadError } = await supabase.storage
       .from('note-image')
-      .upload(storagePath, imageFile)
+      .upload(storagePath, imageFile, { contentType })
     if (uploadError) {
+      console.error(`[createPost] Upload failed for image ${i} ("${imageFile.name}"):`, uploadError.message)
       if (uploadedPaths.length > 0) {
         await supabase.storage.from('note-image').remove(uploadedPaths)
       }
-      return { error: `Image upload failed: ${uploadError.message}` }
+      return { error: `Failed to upload "${imageFile.name}": ${uploadError.message}` }
     }
 
     uploadedPaths.push(storagePath)
