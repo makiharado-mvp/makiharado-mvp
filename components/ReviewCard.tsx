@@ -15,14 +15,30 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
   const title = source?.title ?? '—'
   const content = source?.content ?? null
 
-  // For post reviews: use the first image from post_images (sorted by position).
-  // Fall back to legacy post.image_url for old posts that predate the post_images table.
-  // For note reviews: use the note's image_url directly.
-  const post = review.posts
-  const postImageUrl = post?.post_images && post.post_images.length > 0
-    ? [...post.post_images].sort((a, b) => a.position - b.position)[0].image_url
-    : (post?.image_url ?? null)
-  const imageUrl = review.posts ? postImageUrl : (review.notes?.image_url ?? null)
+  // Resolve image URL explicitly so silent fallthroughs are visible in the log.
+  let imageUrl: string | null = null
+  if (review.posts) {
+    const postImages = review.posts.post_images
+    if (Array.isArray(postImages) && postImages.length > 0) {
+      // Sort by position ascending, use the first entry
+      imageUrl = [...postImages].sort((a, b) => a.position - b.position)[0].image_url
+    } else {
+      // Legacy fallback: post was created before the post_images table
+      imageUrl = review.posts.image_url ?? null
+    }
+  } else if (review.notes) {
+    imageUrl = review.notes.image_url ?? null
+  }
+
+  // Debug log — remove once image display is confirmed working
+  console.log('[ReviewCard]', {
+    review_id: review.id,
+    post_id: review.post_id,
+    posts: review.posts
+      ? { id: review.posts.id, image_url: review.posts.image_url, post_images: review.posts.post_images }
+      : null,
+    resolvedImageUrl: imageUrl,
+  })
 
   function handleComplete() {
     setCompleteError(null)
@@ -92,14 +108,18 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
               </button>
             </div>
 
-            {/* Image */}
-            {imageUrl && (
+            {/* Image — explicit ternary so a falsy imageUrl is immediately visible */}
+            {imageUrl !== null ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageUrl}
                 alt={title}
-                className="w-full object-contain"
+                className="w-full object-contain block"
+                onError={() => console.error('[ReviewCard] image failed to load:', imageUrl)}
               />
+            ) : (
+              // Visible placeholder so we know the image slot is reached but imageUrl is null
+              <p className="text-[10px] text-[#C4A882]/60 px-5 py-3">[no image — imageUrl is null]</p>
             )}
 
             {/* Content */}
