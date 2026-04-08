@@ -1,15 +1,55 @@
 'use client'
 
-import { Suspense } from 'react'
-import { useActionState } from 'react'
+import { Suspense, useState, useTransition } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createPost } from '@/app/actions'
+import { compressImage } from '@/lib/compressImage'
 
 function NewPostForm() {
-  const [state, action, pending] = useActionState(createPost, undefined)
   const params = useSearchParams()
   const defaultDate = params.get('date') ?? new Date().toISOString().split('T')[0]
+  const [formState, setFormState] = useState<{ error?: string } | undefined>(undefined)
+  const [pending, startTransition] = useTransition()
+  const [compressing, setCompressing] = useState(false)
+  const [compressError, setCompressError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setCompressError(null)
+    setFormState(undefined)
+    setCompressing(true)
+
+    const rawData = new FormData(e.currentTarget)
+    const rawFiles = rawData.getAll('image') as File[]
+    const validFiles = rawFiles.filter(f => f.size > 0)
+
+    let compressedFiles: File[]
+    try {
+      compressedFiles = []
+      for (const f of validFiles) {
+        compressedFiles.push(await compressImage(f))
+      }
+    } catch (err) {
+      setCompressing(false)
+      setCompressError(err instanceof Error ? err.message : 'Image compression failed.')
+      return
+    }
+
+    const newData = new FormData()
+    for (const [key, value] of rawData.entries()) {
+      if (key !== 'image') newData.append(key, value)
+    }
+    for (const f of compressedFiles) {
+      newData.append('image', f)
+    }
+
+    setCompressing(false)
+    startTransition(async () => {
+      const result = await createPost(undefined, newData)
+      if (result?.error) setFormState(result)
+    })
+  }
 
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF7' }}>
@@ -28,7 +68,7 @@ function NewPostForm() {
           </Link>
         </div>
 
-        <form action={action} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Date */}
           <div>
             <label className="block text-xs tracking-widest uppercase text-[#8A7A6A] mb-1.5">
@@ -86,16 +126,19 @@ function NewPostForm() {
             />
           </div>
 
-          {state?.error && (
-            <p className="text-xs text-red-600">{state.error}</p>
+          {compressError && (
+            <p className="text-xs text-red-600">{compressError}</p>
+          )}
+          {formState?.error && (
+            <p className="text-xs text-red-600">{formState.error}</p>
           )}
 
           <button
             type="submit"
-            disabled={pending}
+            disabled={compressing || pending}
             className="w-full bg-[#1C3144] text-[#FAFAF7] py-3 text-xs tracking-widest uppercase hover:bg-[#C4A882] transition-colors disabled:opacity-50"
           >
-            {pending ? 'Saving...' : 'Save Post'}
+            {compressing ? 'Compressing...' : pending ? 'Saving...' : 'Save Post'}
           </button>
         </form>
       </div>

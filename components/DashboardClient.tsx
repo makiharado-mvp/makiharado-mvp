@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useTransition, useActionState } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { createPost, deletePost, toggleNotifications } from '@/app/actions'
+import { compressImage } from '@/lib/compressImage'
 import ReviewCard from '@/components/ReviewCard'
 import { createClient } from '@/lib/supabase/client'
 import type { Post, PostImage, Review } from '@/types'
@@ -232,8 +233,50 @@ export default function DashboardClient({
   const [dateReviews, setDateReviews] = useState<Review[]>([])
   // maps review.id → next due_date string, or null if this is the final review
   const [nextDueDateMap, setNextDueDateMap] = useState<Record<string, string | null>>({})
-  const [formState, formAction, formPending] = useActionState(createPost, undefined)
+  const [formState, setFormState] = useState<{ error?: string } | undefined>(undefined)
+  const [formPending, startFormTransition] = useTransition()
+  const [compressing, setCompressing] = useState(false)
+  const [compressError, setCompressError] = useState<string | null>(null)
   const [imageCount, setImageCount] = useState(0)
+
+  async function handlePostSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setCompressError(null)
+    setFormState(undefined)
+    setCompressing(true)
+
+    const rawData = new FormData(e.currentTarget)
+    const rawFiles = rawData.getAll('image') as File[]
+    const validFiles = rawFiles.filter(f => f.size > 0)
+
+    let compressedFiles: File[]
+    try {
+      compressedFiles = []
+      for (const f of validFiles) {
+        compressedFiles.push(await compressImage(f))  // sequential — one at a time
+      }
+    } catch (err) {
+      setCompressing(false)
+      setCompressError(err instanceof Error ? err.message : 'Image compression failed.')
+      return
+    }
+
+    // Rebuild FormData with compressed files in place of originals
+    const newData = new FormData()
+    for (const [key, value] of rawData.entries()) {
+      if (key !== 'image') newData.append(key, value)
+    }
+    for (const f of compressedFiles) {
+      newData.append('image', f)
+    }
+
+    setCompressing(false)
+    startFormTransition(async () => {
+      const result = await createPost(undefined, newData)
+      if (result?.error) setFormState(result)
+      // On success, createPost calls redirect() — navigation happens automatically
+    })
+  }
 
   useEffect(() => {
     const t = new Date()
@@ -457,7 +500,7 @@ export default function DashboardClient({
           {/* New Post Form */}
           <div>
             <p className="text-[10px] tracking-[6px] uppercase text-[#C4A882] mb-3">New Post</p>
-            <form action={formAction} className="space-y-3">
+            <form onSubmit={handlePostSubmit} className="space-y-3">
 
               <div>
                 <label className="block text-[10px] tracking-widest uppercase text-[#8A7A6A] mb-1">
@@ -504,6 +547,9 @@ export default function DashboardClient({
                 />
               </div>
 
+              {compressError && (
+                <p className="text-xs text-red-600">{compressError}</p>
+              )}
               {formState?.error && (
                 <p className="text-xs text-red-600">{formState.error}</p>
               )}
@@ -514,10 +560,10 @@ export default function DashboardClient({
 
               <button
                 type="submit"
-                disabled={formPending}
+                disabled={compressing || formPending}
                 className="w-full bg-[#1C3144] text-[#FAFAF7] py-2.5 text-xs tracking-widest uppercase hover:bg-[#C4A882] transition-colors disabled:opacity-50"
               >
-                {formPending ? 'Saving...' : 'Save Post'}
+                {compressing ? 'Compressing...' : formPending ? 'Saving...' : 'Save Post'}
               </button>
             </form>
           </div>
