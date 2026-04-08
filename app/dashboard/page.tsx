@@ -19,7 +19,7 @@ export default async function DashboardPage({
   // Reviews due today or earlier, not yet completed
   const { data: reviews } = await supabase
     .from('reviews')
-    .select('*, notes(*), posts(*)')
+    .select('*, notes(*), posts(*, post_images(id, image_url, position))')
     .eq('user_id', user.id)
     .is('completed_at', null)
     .lte('due_date', todayISO())

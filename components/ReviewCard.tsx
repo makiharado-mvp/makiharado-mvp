@@ -13,8 +13,16 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
   // Support both note-linked and post-linked reviews
   const source = review.notes ?? review.posts
   const title = source?.title ?? '—'
-  const imageUrl = source?.image_url ?? null
   const content = source?.content ?? null
+
+  // For post reviews: use the first image from post_images (sorted by position).
+  // Fall back to legacy post.image_url for old posts that predate the post_images table.
+  // For note reviews: use the note's image_url directly.
+  const post = review.posts
+  const postImageUrl = post?.post_images && post.post_images.length > 0
+    ? [...post.post_images].sort((a, b) => a.position - b.position)[0].image_url
+    : (post?.image_url ?? null)
+  const imageUrl = review.posts ? postImageUrl : (review.notes?.image_url ?? null)
 
   function handleComplete() {
     setCompleteError(null)
