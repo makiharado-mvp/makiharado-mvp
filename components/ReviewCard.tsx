@@ -30,15 +30,6 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
     imageUrl = review.notes.image_url ?? null
   }
 
-  // Debug log — remove once image display is confirmed working
-  console.log('[ReviewCard]', {
-    review_id: review.id,
-    post_id: review.post_id,
-    posts: review.posts
-      ? { id: review.posts.id, image_url: review.posts.image_url, post_images: review.posts.post_images }
-      : null,
-    resolvedImageUrl: imageUrl,
-  })
 
   function handleComplete() {
     setCompleteError(null)
@@ -108,18 +99,14 @@ export default function ReviewCard({ review, initialOpen }: { review: Review; in
               </button>
             </div>
 
-            {/* Image — explicit ternary so a falsy imageUrl is immediately visible */}
-            {imageUrl !== null ? (
+            {/* Image */}
+            {imageUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={imageUrl}
                 alt={title}
-                className="w-full object-contain block"
-                onError={() => console.error('[ReviewCard] image failed to load:', imageUrl)}
+                className="w-full object-contain"
               />
-            ) : (
-              // Visible placeholder so we know the image slot is reached but imageUrl is null
-              <p className="text-[10px] text-[#C4A882]/60 px-5 py-3">[no image — imageUrl is null]</p>
             )}
 
             {/* Content */}

@@ -293,7 +293,27 @@ export default function DashboardClient({
         .eq('user_id', userId)
         .eq('due_date', selectedDate)
 
-      const reviews = current ?? []
+      const rawReviews = current ?? []
+
+      // Fetch post_images separately (same reason as server: nested join unreliable
+      // for new tables before PostgREST schema cache refreshes).
+      const datePostIds = rawReviews.map(r => r.post_id).filter((id): id is string => id !== null)
+      const postImagesMap: Record<string, { id: string; image_url: string; position: number }[]> = {}
+      if (datePostIds.length > 0) {
+        const { data: imgs } = await supabase
+          .from('post_images')
+          .select('id, post_id, image_url, position')
+          .in('post_id', datePostIds)
+        for (const img of imgs ?? []) {
+          if (!postImagesMap[img.post_id]) postImagesMap[img.post_id] = []
+          postImagesMap[img.post_id].push(img)
+        }
+      }
+
+      const reviews = rawReviews.map(r => ({
+        ...r,
+        posts: r.posts ? { ...r.posts, post_images: postImagesMap[r.posts.id] ?? [] } : null,
+      }))
       setDateReviews(reviews)
 
       // Collect post_ids and note_ids to look up next scheduled review for each
@@ -579,10 +599,19 @@ export default function DashboardClient({
       {/* Review note/post detail modal */}
       {selectedReview && (selectedReview.notes ?? selectedReview.posts) && (() => {
         const source = selectedReview.notes ?? selectedReview.posts!
+        // For post reviews, resolve image from post_images (new model) with
+        // fallback to legacy image_url. Note reviews use image_url directly.
+        let resolvedImageUrl: string | null = source.image_url ?? null
+        if (selectedReview.posts) {
+          const imgs = selectedReview.posts.post_images
+          if (Array.isArray(imgs) && imgs.length > 0) {
+            resolvedImageUrl = [...imgs].sort((a, b) => a.position - b.position)[0].image_url
+          }
+        }
         return (
           <NoteDetailModal
             title={source.title}
-            imageUrl={source.image_url}
+            imageUrl={resolvedImageUrl}
             content={source.content}
             reviewDay={selectedReview.interval_day}
             dueDate={selectedReview.due_date}
