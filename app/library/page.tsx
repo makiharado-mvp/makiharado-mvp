@@ -120,7 +120,7 @@ export default async function LibraryPage({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4">
             {(posts as LibraryPost[]).map(post => (
               <LibraryCard key={post.id} post={post} />
             ))}
