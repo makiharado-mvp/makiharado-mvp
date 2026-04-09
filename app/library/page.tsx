@@ -122,17 +122,18 @@ export default async function LibraryPage({
         ) : (
           <div className="relative">
             {/* Books row — tight gap like books packed on a shelf */}
-            <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pt-2 px-2 pb-0">
+            <div className="flex gap-0 overflow-x-auto snap-x snap-mandatory pt-2 px-2 pb-0">
               {(posts as LibraryPost[]).map(post => (
                 <LibraryCard key={post.id} post={post} />
               ))}
             </div>
             {/* Wooden shelf board */}
             <div
-              className="h-4 mx-2 rounded-b-sm"
+              className="h-6 mx-2"
               style={{
-                background: 'linear-gradient(to bottom, #B09070, #8A6A4A)',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                borderTop: '2px solid #0A0603',
+                background: 'linear-gradient(to bottom, #4A2E14, #2A1808 60%, #120A04)',
+                boxShadow: '0 8px 18px rgba(0,0,0,0.65), inset 0 3px 6px rgba(0,0,0,0.5)',
               }}
             />
           </div>
