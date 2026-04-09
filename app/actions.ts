@@ -363,7 +363,7 @@ export async function createLibraryPost(_: unknown, formData: FormData) {
     const imageFile = imageFiles[i]
     const rawExt = imageFile.name.split('.').pop()?.toLowerCase() ?? ''
     const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : 'jpg'
-    const storagePath = `library/${user.id}/${timestamp}-${i}.${ext}`
+    const storagePath = `${user.id}/library/${timestamp}-${i}.${ext}`
     const contentType = imageFile.type.startsWith('image/')
       ? imageFile.type
       : (EXT_TO_MIME[ext] ?? 'application/octet-stream')
@@ -521,11 +521,11 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
   }
 
   // Step 5 — storage files (best-effort; non-fatal if folder is empty or missing)
-  // Private note/post images live at {userId}/, library images at library/{userId}/
+  // Private note/post images live at {userId}/, library images at {userId}/library/
   const [{ data: privateFiles, error: listError }, { data: libraryFiles, error: libListError }] =
     await Promise.all([
       admin.storage.from('note-image').list(userId),
-      admin.storage.from('note-image').list(`library/${userId}`),
+      admin.storage.from('note-image').list(`${userId}/library`),
     ])
   if (listError) {
     console.error(`[deleteAccount] Storage list failed for ${userId}:`, listError.message)
@@ -537,7 +537,7 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
   }
   const allPaths = [
     ...(privateFiles ?? []).map(f => `${userId}/${f.name}`),
-    ...(libraryFiles ?? []).map(f => `library/${userId}/${f.name}`),
+    ...(libraryFiles ?? []).map(f => `${userId}/library/${f.name}`),
   ]
   if (allPaths.length > 0) {
     const { error: removeError } = await admin.storage.from('note-image').remove(allPaths)
