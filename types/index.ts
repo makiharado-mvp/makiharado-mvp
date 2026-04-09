@@ -41,18 +41,28 @@ export type LibraryImage = {
 export type LibraryPost = {
   id: string
   user_id: string
-  // source_note_id intentionally omitted from this type — never exposed in public queries
+  // source_note_id intentionally omitted — never exposed in public queries
   title: string
   content: string
-  category: string
+  top_category: string
+  mid_category: string
+  item_type:    string | null   // only for language posts; null for math/science
   tags: string[]
   created_at: string
   updated_at: string
   library_images?: LibraryImage[]
 }
 
-export const LIBRARY_CATEGORIES = ['stationery', 'journaling', 'tips', 'reviews', 'other'] as const
-export type LibraryCategory = typeof LIBRARY_CATEGORIES[number]
+export const LIBRARY_TOP_CATEGORIES = ['language', 'other'] as const
+export type LibraryTopCategory = typeof LIBRARY_TOP_CATEGORIES[number]
+
+export const LIBRARY_MID_CATEGORIES = {
+  language: ['japanese', 'english', 'chinese', 'other'],
+  other:    ['math', 'science', 'other'],
+} as const
+
+export const LIBRARY_ITEM_TYPES = ['vocab', 'grammar', 'writing', 'quote', 'other'] as const
+export type LibraryItemType = typeof LIBRARY_ITEM_TYPES[number]
 
 export type Review = {
   id: string

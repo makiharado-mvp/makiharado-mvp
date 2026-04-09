@@ -1,38 +1,51 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import LibraryCard from '@/components/LibraryCard'
-import { LIBRARY_CATEGORIES } from '@/types'
-import type { LibraryPost } from '@/types'
+import { LIBRARY_TOP_CATEGORIES, LIBRARY_MID_CATEGORIES, LIBRARY_ITEM_TYPES } from '@/types'
+import type { LibraryPost, LibraryTopCategory } from '@/types'
 
 export const revalidate = 60
 
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>
+  searchParams: Promise<{ top?: string; mid?: string; type?: string }>
 }) {
-  const { category } = await searchParams
-  const activeCategory = LIBRARY_CATEGORIES.includes(category as typeof LIBRARY_CATEGORIES[number])
-    ? (category as typeof LIBRARY_CATEGORIES[number])
-    : null
+  const { top, mid, type } = await searchParams
+
+  const activeTop  = LIBRARY_TOP_CATEGORIES.includes(top as LibraryTopCategory)
+    ? (top as LibraryTopCategory) : null
+  const midOptions = activeTop ? LIBRARY_MID_CATEGORIES[activeTop] : []
+  const activeMid  = activeTop && midOptions.includes(mid as never) ? mid! : null
+  const activeType = activeTop === 'language' && LIBRARY_ITEM_TYPES.includes(type as never)
+    ? type! : null
+
+  // math/science always sort by title; language by newest first
+  const sortByTitle = activeMid === 'math' || activeMid === 'science'
 
   const supabase = await createClient()
-
-  // Check if user is signed in — to show "Share to Library" CTA
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Public query: never selects source_note_id — no private note data reachable
+  // Public query — never selects source_note_id
   let query = supabase
     .from('library_posts')
-    .select('id, user_id, title, content, category, tags, created_at, updated_at, library_images(id, image_url, position)')
-    .order('created_at', { ascending: false })
+    .select('id, user_id, title, content, top_category, mid_category, item_type, tags, created_at, updated_at, library_images(id, image_url, position)')
     .limit(50)
 
-  if (activeCategory) {
-    query = query.eq('category', activeCategory)
-  }
+  if (activeTop)  query = query.eq('top_category', activeTop)
+  if (activeMid)  query = query.eq('mid_category', activeMid)
+  if (activeType) query = query.eq('item_type', activeType)
+
+  query = sortByTitle
+    ? query.order('title', { ascending: true })
+    : query.order('created_at', { ascending: false })
 
   const { data: posts } = await query
+
+  // Build hrefs for filter tabs
+  function topHref(t: string)    { return `/library?top=${t}` }
+  function midHref(m: string)    { return `/library?top=${activeTop}&mid=${m}` }
+  function typeHref(ty: string)  { return `/library?top=${activeTop}&mid=${activeMid}&type=${ty}` }
 
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF7' }}>
@@ -46,61 +59,62 @@ export default async function LibraryPage({
             <p className="text-xs text-[#8A7A6A] mt-1">Learning notes shared by the community</p>
           </div>
           <div className="flex items-center gap-4 mt-1">
-            <Link
-              href="/dashboard"
-              className="text-xs tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors"
-            >
+            <Link href="/dashboard"
+              className="text-xs tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors">
               ← Dashboard
             </Link>
             {user && (
-              <Link
-                href="/library/new"
-                className="text-xs tracking-widest uppercase bg-[#1C3144] text-[#FAFAF7] px-4 py-2 hover:bg-[#C4A882] transition-colors"
-              >
+              <Link href="/library/new"
+                className="text-xs tracking-widest uppercase bg-[#1C3144] text-[#FAFAF7] px-4 py-2 hover:bg-[#C4A882] transition-colors">
                 Share a note
               </Link>
             )}
           </div>
         </div>
 
-        {/* Category tabs */}
-        <div className="flex flex-wrap gap-2 mb-8 border-b border-[#C4A882]/20 pb-4">
-          <Link
-            href="/library"
-            className={[
-              'text-[10px] tracking-widest uppercase px-3 py-1.5 border transition-colors',
-              !activeCategory
-                ? 'bg-[#1C3144] text-[#FAFAF7] border-[#1C3144]'
-                : 'border-[#C4A882]/40 text-[#8A7A6A] hover:border-[#C4A882]',
-            ].join(' ')}
-          >
-            All
-          </Link>
-          {LIBRARY_CATEGORIES.map(cat => (
-            <Link
-              key={cat}
-              href={`/library?category=${cat}`}
-              className={[
-                'text-[10px] tracking-widest uppercase px-3 py-1.5 border transition-colors',
-                activeCategory === cat
-                  ? 'bg-[#1C3144] text-[#FAFAF7] border-[#1C3144]'
-                  : 'border-[#C4A882]/40 text-[#8A7A6A] hover:border-[#C4A882]',
-              ].join(' ')}
-            >
-              {cat}
+        {/* Row 1 — top category */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <Link href="/library" className={tabClass(!activeTop)}>All</Link>
+          {LIBRARY_TOP_CATEGORIES.map(t => (
+            <Link key={t} href={topHref(t)} className={tabClass(activeTop === t)}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
             </Link>
           ))}
         </div>
+
+        {/* Row 2 — mid category (shown when top is selected) */}
+        {activeTop && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            <Link href={topHref(activeTop)} className={tabClass(!activeMid)}>All</Link>
+            {midOptions.map(m => (
+              <Link key={m} href={midHref(m)} className={tabClass(activeMid === m)}>
+                {m.charAt(0).toUpperCase() + m.slice(1)}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Row 3 — item type (only for language) */}
+        {activeTop === 'language' && activeMid && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            <Link href={midHref(activeMid)} className={tabClass(!activeType)}>All types</Link>
+            {LIBRARY_ITEM_TYPES.map(ty => (
+              <Link key={ty} href={typeHref(ty)} className={tabClass(activeType === ty)}>
+                {ty.charAt(0).toUpperCase() + ty.slice(1)}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        <div className="border-b border-[#C4A882]/20 mb-8" />
 
         {/* Post grid */}
         {!posts || posts.length === 0 ? (
           <div className="text-center py-20 border border-[#C4A882]/20">
             <p className="text-[#8A7A6A] text-sm">No posts yet in this category.</p>
             {user && (
-              <Link
-                href="/library/new"
-                className="inline-block mt-4 text-xs tracking-widest uppercase text-[#C4A882] hover:text-[#1C3144] transition-colors"
-              >
+              <Link href="/library/new"
+                className="inline-block mt-4 text-xs tracking-widest uppercase text-[#C4A882] hover:text-[#1C3144] transition-colors">
                 Be the first to share →
               </Link>
             )}
@@ -115,4 +129,13 @@ export default async function LibraryPage({
       </div>
     </div>
   )
+}
+
+function tabClass(active: boolean) {
+  return [
+    'text-[10px] tracking-widest uppercase px-3 py-1.5 border transition-colors',
+    active
+      ? 'bg-[#1C3144] text-[#FAFAF7] border-[#1C3144]'
+      : 'border-[#C4A882]/40 text-[#8A7A6A] hover:border-[#C4A882]',
+  ].join(' ')
 }

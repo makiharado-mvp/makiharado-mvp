@@ -312,15 +312,22 @@ export async function createLibraryPost(_: unknown, formData: FormData) {
 
   const title          = (formData.get('title') as string).trim()
   const content        = (formData.get('content') as string).trim()
-  const category       = formData.get('category') as string
+  const top_category   = formData.get('top_category') as string
+  const mid_category   = formData.get('mid_category') as string
+  const item_type      = (formData.get('item_type') as string | null) || null
   const tagsRaw        = ((formData.get('tags') as string) ?? '').trim()
   const source_note_id = (formData.get('source_note_id') as string | null) || null
 
   if (!title)   return { error: 'Title is required.' }
   if (!content) return { error: 'Content is required.' }
 
-  const VALID_CATEGORIES = ['stationery', 'journaling', 'tips', 'reviews', 'other']
-  if (!VALID_CATEGORIES.includes(category)) return { error: 'Invalid category.' }
+  const VALID_TOP = ['language', 'other']
+  const VALID_MID = ['japanese', 'english', 'chinese', 'math', 'science', 'other']
+  const VALID_ITEM_TYPES = ['vocab', 'grammar', 'writing', 'quote', 'other']
+  if (!VALID_TOP.includes(top_category)) return { error: 'Invalid category.' }
+  if (!VALID_MID.includes(mid_category)) return { error: 'Invalid subcategory.' }
+  if (item_type && top_category !== 'language') return { error: 'Item type only applies to language posts.' }
+  if (item_type && !VALID_ITEM_TYPES.includes(item_type)) return { error: 'Invalid item type.' }
 
   const tags = tagsRaw
     .split(',')
@@ -378,7 +385,7 @@ export async function createLibraryPost(_: unknown, formData: FormData) {
   // Insert library_post row
   const { data: post, error: postError } = await supabase
     .from('library_posts')
-    .insert({ user_id: user.id, title, content, category, tags, source_note_id })
+    .insert({ user_id: user.id, title, content, top_category, mid_category, item_type, tags, source_note_id })
     .select()
     .single()
   if (postError || !post) {

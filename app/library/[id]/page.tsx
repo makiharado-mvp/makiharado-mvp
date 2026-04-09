@@ -17,7 +17,7 @@ export default async function LibraryPostPage({
   // Public query — never selects source_note_id
   const { data: post } = await supabase
     .from('library_posts')
-    .select('id, user_id, title, content, category, tags, created_at, library_images(id, image_url, position, storage_path)')
+    .select('id, user_id, title, content, top_category, mid_category, item_type, tags, created_at, library_images(id, image_url, position, storage_path)')
     .eq('id', id)
     .single()
 
@@ -44,7 +44,8 @@ export default async function LibraryPostPage({
             ← Library
           </Link>
           <span className="text-[10px] tracking-widest uppercase text-[#C4A882]">
-            {post.category}
+            {[post.top_category, post.mid_category, (post as LibraryPost).item_type]
+              .filter(Boolean).join(' / ')}
           </span>
         </div>
 

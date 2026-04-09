@@ -6,6 +6,10 @@ export default function LibraryCard({ post }: { post: LibraryPost }) {
     ?.slice()
     .sort((a, b) => a.position - b.position)[0]?.image_url ?? null
 
+  const categoryLabel = [post.top_category, post.mid_category, post.item_type]
+    .filter(Boolean)
+    .join(' / ')
+
   return (
     <Link
       href={`/library/${post.id}`}
@@ -20,11 +24,9 @@ export default function LibraryCard({ post }: { post: LibraryPost }) {
         />
       )}
       <div className="p-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] tracking-widest uppercase text-[#C4A882]">
-            {post.category}
-          </span>
-        </div>
+        <span className="text-[10px] tracking-widest uppercase text-[#C4A882]">
+          {categoryLabel}
+        </span>
         <h2 className="text-[#1C3144] text-sm font-medium leading-snug line-clamp-2">
           {post.title}
         </h2>
