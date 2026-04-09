@@ -1,0 +1,118 @@
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import LibraryCard from '@/components/LibraryCard'
+import { LIBRARY_CATEGORIES } from '@/types'
+import type { LibraryPost } from '@/types'
+
+export const revalidate = 60
+
+export default async function LibraryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>
+}) {
+  const { category } = await searchParams
+  const activeCategory = LIBRARY_CATEGORIES.includes(category as typeof LIBRARY_CATEGORIES[number])
+    ? (category as typeof LIBRARY_CATEGORIES[number])
+    : null
+
+  const supabase = await createClient()
+
+  // Check if user is signed in — to show "Share to Library" CTA
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Public query: never selects source_note_id — no private note data reachable
+  let query = supabase
+    .from('library_posts')
+    .select('id, user_id, title, content, category, tags, created_at, updated_at, library_images(id, image_url, position)')
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (activeCategory) {
+    query = query.eq('category', activeCategory)
+  }
+
+  const { data: posts } = await query
+
+  return (
+    <div className="min-h-screen" style={{ background: '#FAFAF7' }}>
+      <div className="max-w-7xl mx-auto px-6 py-10">
+
+        {/* Header */}
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <p className="text-[10px] tracking-[6px] uppercase text-[#C4A882] mb-1">Makiharado</p>
+            <h1 className="text-2xl text-[#1C3144]">Library</h1>
+            <p className="text-xs text-[#8A7A6A] mt-1">Learning notes shared by the community</p>
+          </div>
+          <div className="flex items-center gap-4 mt-1">
+            <Link
+              href="/dashboard"
+              className="text-xs tracking-widest uppercase text-[#8A7A6A] hover:text-[#1C3144] transition-colors"
+            >
+              ← Dashboard
+            </Link>
+            {user && (
+              <Link
+                href="/library/new"
+                className="text-xs tracking-widest uppercase bg-[#1C3144] text-[#FAFAF7] px-4 py-2 hover:bg-[#C4A882] transition-colors"
+              >
+                Share a note
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Category tabs */}
+        <div className="flex flex-wrap gap-2 mb-8 border-b border-[#C4A882]/20 pb-4">
+          <Link
+            href="/library"
+            className={[
+              'text-[10px] tracking-widest uppercase px-3 py-1.5 border transition-colors',
+              !activeCategory
+                ? 'bg-[#1C3144] text-[#FAFAF7] border-[#1C3144]'
+                : 'border-[#C4A882]/40 text-[#8A7A6A] hover:border-[#C4A882]',
+            ].join(' ')}
+          >
+            All
+          </Link>
+          {LIBRARY_CATEGORIES.map(cat => (
+            <Link
+              key={cat}
+              href={`/library?category=${cat}`}
+              className={[
+                'text-[10px] tracking-widest uppercase px-3 py-1.5 border transition-colors',
+                activeCategory === cat
+                  ? 'bg-[#1C3144] text-[#FAFAF7] border-[#1C3144]'
+                  : 'border-[#C4A882]/40 text-[#8A7A6A] hover:border-[#C4A882]',
+              ].join(' ')}
+            >
+              {cat}
+            </Link>
+          ))}
+        </div>
+
+        {/* Post grid */}
+        {!posts || posts.length === 0 ? (
+          <div className="text-center py-20 border border-[#C4A882]/20">
+            <p className="text-[#8A7A6A] text-sm">No posts yet in this category.</p>
+            {user && (
+              <Link
+                href="/library/new"
+                className="inline-block mt-4 text-xs tracking-widest uppercase text-[#C4A882] hover:text-[#1C3144] transition-colors"
+              >
+                Be the first to share →
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {(posts as LibraryPost[]).map(post => (
+              <LibraryCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

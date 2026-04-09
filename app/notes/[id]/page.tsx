@@ -66,6 +66,19 @@ export default async function NoteDetailPage({
           )}
         </article>
 
+        {/* Share to Library */}
+        <div className="mb-10">
+          <Link
+            href={`/library/new?from=${note.id}`}
+            className="inline-block text-xs tracking-widest uppercase border border-[#C4A882]/40 text-[#8A7A6A] px-4 py-2 hover:border-[#C4A882] hover:text-[#1C3144] transition-colors"
+          >
+            Share to Library
+          </Link>
+          <p className="text-[10px] text-[#C4A882]/60 mt-2">
+            Your private note will not be published. You choose what to share before it goes public.
+          </p>
+        </div>
+
         {/* Review schedule */}
         <section>
           <h2 className="text-xs tracking-widest uppercase text-[#C4A882] mb-4">Review Schedule</h2>

@@ -28,6 +28,32 @@ export type Post = {
   post_images?: PostImage[]
 }
 
+export type LibraryImage = {
+  id: string
+  library_post_id: string
+  user_id: string
+  storage_path: string
+  image_url: string
+  position: number
+  created_at: string
+}
+
+export type LibraryPost = {
+  id: string
+  user_id: string
+  // source_note_id intentionally omitted from this type — never exposed in public queries
+  title: string
+  content: string
+  category: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+  library_images?: LibraryImage[]
+}
+
+export const LIBRARY_CATEGORIES = ['stationery', 'journaling', 'tips', 'reviews', 'other'] as const
+export type LibraryCategory = typeof LIBRARY_CATEGORIES[number]
+
 export type Review = {
   id: string
   note_id: string | null

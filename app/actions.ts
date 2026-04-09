@@ -303,6 +303,143 @@ export async function deletePost(postId: string) {
   revalidatePath('/dashboard')
 }
 
+// ── Library ───────────────────────────────────────────────────
+
+export async function createLibraryPost(_: unknown, formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const title          = (formData.get('title') as string).trim()
+  const content        = (formData.get('content') as string).trim()
+  const category       = formData.get('category') as string
+  const tagsRaw        = ((formData.get('tags') as string) ?? '').trim()
+  const source_note_id = (formData.get('source_note_id') as string | null) || null
+
+  if (!title)   return { error: 'Title is required.' }
+  if (!content) return { error: 'Content is required.' }
+
+  const VALID_CATEGORIES = ['stationery', 'journaling', 'tips', 'reviews', 'other']
+  if (!VALID_CATEGORIES.includes(category)) return { error: 'Invalid category.' }
+
+  const tags = tagsRaw
+    .split(',')
+    .map(t => t.trim().toLowerCase().slice(0, 30))
+    .filter(t => t.length > 0)
+    .slice(0, 10)
+
+  // Daily limit: 5 library posts per day
+  const today = new Date().toISOString().split('T')[0]
+  const { count: todayCount } = await supabase
+    .from('library_posts')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', `${today}T00:00:00.000Z`)
+  if ((todayCount ?? 0) >= 5) {
+    return { error: 'You can only publish 5 library posts per day.' }
+  }
+
+  // Image validation (0–2 images)
+  const imageFiles = (formData.getAll('image') as File[]).filter(f => f.size > 0)
+  if (imageFiles.length > 2) return { error: 'Maximum 2 images per library post.' }
+  for (const f of imageFiles) {
+    const err = validateImageFile(f)
+    if (err) return { error: err }
+  }
+
+  // Upload images to library/{user_id}/ prefix to separate from private images
+  const timestamp = Date.now()
+  const uploadedPaths: string[] = []
+  const imageRows: { storage_path: string; image_url: string; position: number }[] = []
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const imageFile = imageFiles[i]
+    const rawExt = imageFile.name.split('.').pop()?.toLowerCase() ?? ''
+    const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : 'jpg'
+    const storagePath = `library/${user.id}/${timestamp}-${i}.${ext}`
+    const contentType = imageFile.type.startsWith('image/')
+      ? imageFile.type
+      : (EXT_TO_MIME[ext] ?? 'application/octet-stream')
+
+    const { error: uploadError } = await supabase.storage
+      .from('note-image')
+      .upload(storagePath, imageFile, { contentType })
+    if (uploadError) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from('note-image').remove(uploadedPaths)
+      }
+      return { error: `Failed to upload "${imageFile.name}": ${uploadError.message}` }
+    }
+    uploadedPaths.push(storagePath)
+    const { data: urlData } = supabase.storage.from('note-image').getPublicUrl(storagePath)
+    imageRows.push({ storage_path: storagePath, image_url: urlData.publicUrl, position: i })
+  }
+
+  // Insert library_post row
+  const { data: post, error: postError } = await supabase
+    .from('library_posts')
+    .insert({ user_id: user.id, title, content, category, tags, source_note_id })
+    .select()
+    .single()
+  if (postError || !post) {
+    if (uploadedPaths.length > 0) {
+      await supabase.storage.from('note-image').remove(uploadedPaths)
+    }
+    return { error: postError?.message ?? 'Failed to create library post.' }
+  }
+
+  // Insert library_images rows
+  if (imageRows.length > 0) {
+    const { error: imagesError } = await supabase
+      .from('library_images')
+      .insert(imageRows.map(row => ({ ...row, library_post_id: post.id, user_id: user.id })))
+    if (imagesError) {
+      await supabase.from('library_posts').delete().eq('id', post.id).eq('user_id', user.id)
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from('note-image').remove(uploadedPaths)
+      }
+      return { error: `Failed to save images: ${imagesError.message}` }
+    }
+  }
+
+  revalidatePath('/library')
+  redirect(`/library/${post.id}`)
+}
+
+export async function deleteLibraryPost(postId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  // Fetch post + images — RLS ensures only the owner can read this
+  const { data: post, error: fetchError } = await supabase
+    .from('library_posts')
+    .select('id, user_id, library_images(storage_path)')
+    .eq('id', postId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (fetchError || !post) return { error: 'Library post not found or access denied.' }
+
+  const images = (post as typeof post & { library_images?: { storage_path: string }[] }).library_images ?? []
+  if (images.length > 0) {
+    const paths = images.map(img => img.storage_path)
+    const { error: storageError } = await supabase.storage.from('note-image').remove(paths)
+    if (storageError) console.error('[deleteLibraryPost] Storage remove failed:', storageError.message)
+  }
+
+  // Delete post row — cascades to library_images via ON DELETE CASCADE
+  const { error: deleteError } = await supabase
+    .from('library_posts')
+    .delete()
+    .eq('id', postId)
+    .eq('user_id', user.id)
+
+  if (deleteError) return { error: deleteError.message }
+
+  revalidatePath('/library')
+}
+
 // ── Account deletion ──────────────────────────────────────────
 
 export async function deleteAccount(): Promise<{ error: string } | undefined> {
@@ -346,6 +483,16 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
     return { error: `Failed to delete posts: ${postsError.message}` }
   }
 
+  // Step 2b — library posts (library_images cascade automatically)
+  const { error: libraryError } = await admin
+    .from('library_posts')
+    .delete()
+    .eq('user_id', userId)
+  if (libraryError) {
+    console.error(`[deleteAccount] Library posts delete failed for ${userId}:`, libraryError.message)
+    return { error: `Failed to delete library posts: ${libraryError.message}` }
+  }
+
   // Step 3 — notes
   const { error: notesError } = await admin
     .from('notes')
@@ -367,18 +514,26 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
   }
 
   // Step 5 — storage files (best-effort; non-fatal if folder is empty or missing)
-  const { data: files, error: listError } = await admin.storage
-    .from('note-image')
-    .list(userId)
+  // Private note/post images live at {userId}/, library images at library/{userId}/
+  const [{ data: privateFiles, error: listError }, { data: libraryFiles, error: libListError }] =
+    await Promise.all([
+      admin.storage.from('note-image').list(userId),
+      admin.storage.from('note-image').list(`library/${userId}`),
+    ])
   if (listError) {
     console.error(`[deleteAccount] Storage list failed for ${userId}:`, listError.message)
     return { error: `Failed to list storage files: ${listError.message}` }
   }
-  if (files && files.length > 0) {
-    const paths = files.map(f => `${userId}/${f.name}`)
-    const { error: removeError } = await admin.storage
-      .from('note-image')
-      .remove(paths)
+  if (libListError) {
+    console.error(`[deleteAccount] Library storage list failed for ${userId}:`, libListError.message)
+    return { error: `Failed to list library storage files: ${libListError.message}` }
+  }
+  const allPaths = [
+    ...(privateFiles ?? []).map(f => `${userId}/${f.name}`),
+    ...(libraryFiles ?? []).map(f => `library/${userId}/${f.name}`),
+  ]
+  if (allPaths.length > 0) {
+    const { error: removeError } = await admin.storage.from('note-image').remove(allPaths)
     if (removeError) {
       console.error(`[deleteAccount] Storage remove failed for ${userId}:`, removeError.message)
       return { error: `Failed to delete storage files: ${removeError.message}` }
@@ -389,7 +544,7 @@ export async function deleteAccount(): Promise<{ error: string } | undefined> {
   // Fail immediately if any count > 0 OR if a count query itself fails.
   // A null/errored count is treated as unsafe (not as zero) so we never
   // silently proceed to deleteUser() with unknown remaining state.
-  const verifyTables = ['reviews', 'posts', 'notes', 'user_settings'] as const
+  const verifyTables = ['reviews', 'posts', 'library_posts', 'notes', 'user_settings'] as const
   const verifyCounts = await Promise.all(
     verifyTables.map(t =>
       admin.from(t).select('*', { count: 'exact', head: true }).eq('user_id', userId)
