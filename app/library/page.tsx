@@ -120,10 +120,21 @@ export default async function LibraryPage({
             )}
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4">
-            {(posts as LibraryPost[]).map(post => (
-              <LibraryCard key={post.id} post={post} />
-            ))}
+          <div className="relative">
+            {/* Books row — tight gap like books packed on a shelf */}
+            <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pt-2 px-2 pb-0">
+              {(posts as LibraryPost[]).map(post => (
+                <LibraryCard key={post.id} post={post} />
+              ))}
+            </div>
+            {/* Wooden shelf board */}
+            <div
+              className="h-4 mx-2 rounded-b-sm"
+              style={{
+                background: 'linear-gradient(to bottom, #B09070, #8A6A4A)',
+                boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+              }}
+            />
           </div>
         )}
       </div>
