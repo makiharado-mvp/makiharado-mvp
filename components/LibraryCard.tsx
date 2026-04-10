@@ -2,16 +2,16 @@ import Link from 'next/link'
 import type { LibraryPost } from '@/types'
 
 const BOOK_PALETTE = [
-  { top: '#7A1E1E', bottom: '#2E0808', spine: '#1A0404', text: '#F5F1E8' },  // crimson
-  { top: '#1E3455', bottom: '#091525', spine: '#050D17', text: '#F0EDE4' },  // navy
-  { top: '#1A4D30', bottom: '#092018', spine: '#050F0C', text: '#EBF2E8' },  // forest
-  { top: '#5A3018', bottom: '#261408', spine: '#140A04', text: '#F5F0E0' },  // cognac
-  { top: '#36185A', bottom: '#160924', spine: '#0C0514', text: '#EDE8F5' },  // plum
-  { top: '#183C50', bottom: '#091820', spine: '#040C12', text: '#E4EEF5' },  // teal
-  { top: '#5A4018', bottom: '#241A07', spine: '#120D03', text: '#F5EDD8' },  // amber
-  { top: '#303818', bottom: '#141808', spine: '#0A0C04', text: '#E8F0DC' },  // olive
-  { top: '#4A1E20', bottom: '#1C0A0C', spine: '#100508', text: '#F5E8E8' },  // burgundy
-  { top: '#1E3C3C', bottom: '#0A1818', spine: '#050E0E', text: '#E4F5F0' },  // slate
+  { top: '#A02828', bottom: '#6A1616', spine: '#3C0A0A', text: '#F5F1E8' },  // crimson
+  { top: '#1E4A8A', bottom: '#122E5C', spine: '#0A1C3C', text: '#EAF0F8' },  // navy
+  { top: '#1A6E3C', bottom: '#0E4224', spine: '#082A16', text: '#E8F5EC' },  // forest
+  { top: '#8A4418', bottom: '#5A2C0C', spine: '#361A08', text: '#F5EDD8' },  // cognac
+  { top: '#6E1A8A', bottom: '#461058', spine: '#2C0A38', text: '#F0E8F8' },  // plum
+  { top: '#1A6464', bottom: '#0E4040', spine: '#082828', text: '#E4F5F5' },  // teal
+  { top: '#8A6A14', bottom: '#5C4410', spine: '#38280A', text: '#F8F0D8' },  // amber
+  { top: '#567020', bottom: '#364814', spine: '#20300C', text: '#EEF5DC' },  // olive
+  { top: '#7E182E', bottom: '#4E0E1C', spine: '#300A12', text: '#F8E4EA' },  // burgundy
+  { top: '#1E5A70', bottom: '#123848', spine: '#0A2430', text: '#E0EEF5' },  // steel
 ]
 
 // Deterministic — same post always gets the same style
@@ -25,10 +25,10 @@ function bookStyle(id: string) {
     height:        224 + (b[1] % 37),              // 224–260px
     width:         120 + (b[2] % 21),              // 120–140px
     gradientAngle: 177 + (b[3] % 7),               // 177°–183°
-    shadowStr:     0.45 + (b[4] % 30) / 100,       // 0.45–0.74
+    shadowStr:     0.40 + (b[4] % 25) / 100,       // 0.40–0.65
     textOpacity:   0.72 + (b[5] % 26) / 100,       // 0.72–0.97
-    brightness:    0.84 + (b[6] % 32) / 100,       // 0.84–1.15
-    saturation:    0.72 + (b[7] % 28) / 100,       // 0.72–0.99 (wear)
+    brightness:    0.92 + (b[6] % 20) / 100,       // 0.92–1.11
+    saturation:    0.82 + (b[7] % 18) / 100,       // 0.82–0.99 (wear)
     paddingTopPx:  18   + (b[0] % 32),             // 18–50px
     spineWidthPx:  5    + (b[1] % 4),              // 5–8px
   }
@@ -75,15 +75,16 @@ export default function LibraryCard({ post }: { post: LibraryPost }) {
           style={{ paddingTop: s.paddingTopPx }}
         >
           <p
-            className="font-serif text-[11px] uppercase overflow-hidden"
+            className="font-serif text-[12px] uppercase overflow-hidden"
             style={{
               color: color.text,
               opacity: s.textOpacity,
               writingMode: 'vertical-rl',
               textOrientation: 'mixed',
-              letterSpacing: '0.2em',
+              letterSpacing: '0.18em',
               maxHeight: s.height - 44,
               textShadow: '0 1px 4px rgba(0,0,0,0.65)',
+              fontFamily: 'Georgia, "Times New Roman", serif',
             }}
           >
             {post.title}
